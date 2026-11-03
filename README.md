@@ -172,7 +172,7 @@ b) Execute the Script:
 ```
 bash
 # 1. Clone the repository
-git clone https://github.com/carbon-aware-drl-platform
+git clone https://github.com/carbon-aware-deep-reinforcement-learning-platform
 cd carbon-aware-drl-platform
 
 # 2. Set up environment
