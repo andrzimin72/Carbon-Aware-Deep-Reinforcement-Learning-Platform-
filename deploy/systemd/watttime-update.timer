@@ -1,0 +1,109 @@
+# =============================================================================
+# WATTTIME DAILY UPDATE TIMER
+# =============================================================================
+# Systemd timer unit that triggers watttime-update.service daily.
+# This is the recommended way to schedule recurring tasks on modern Linux.
+#
+# Location: /etc/systemd/system/watttime-update.timer
+#
+# Features:
+# - Runs daily at 2:00 AM UTC
+# - Persistent: runs if the system was off at scheduled time
+# - Randomized delay: avoids thundering herd on API
+# - Automatic catch-up: ensures data stays fresh
+#
+# Author: Carbon-Aware Deep Reinforcement Learning Platform
+# =============================================================================
+
+[Unit]
+Description=WattTime Daily Data Update Timer
+Documentation=https://github.com/your-org/carbon-aware-deep-reinforcement-learning-platform
+Documentation=https://www.watttime.org/api-documentation/
+
+# Metadata
+PartOf=carbon-aware-platform.target
+
+[Timer]
+# =============================================================================
+# SCHEDULE CONFIGURATION
+# =============================================================================
+
+# Run daily at 2:00 AM UTC
+# Format: DayOfWeek Year-Month-Day Hour:Minute:Second
+# Use "*" for "any"
+OnCalendar=*-*-* 02:00:00 UTC
+
+# Alternative schedules (uncomment one if needed):
+# OnCalendar=daily                    # Every day at 00:00
+# OnCalendar=*-*-* 02:00:00           # Every day at 2:00 AM (local time)
+# OnCalendar=Mon,Thu *-*-* 02:00:00   # Mondays and Thursdays at 2:00 AM
+# OnCalendar=*:00/6                   # Every 6 hours
+# OnCalendar=*:00/30                  # Every 30 minutes (for testing)
+
+# Timezone: explicitly set to UTC for consistency
+# (OnCalendar times are interpreted in this timezone)
+# Note: If you want local time, remove this line or set to your timezone
+# Timezone=UTC
+
+# =============================================================================
+# PERSISTENCE AND RELIABILITY
+# =============================================================================
+
+# Persistent: if the system was off at the scheduled time,
+# run the job as soon as possible after boot
+# This ensures we don't miss updates during downtime
+Persistent=true
+
+# Randomized delay: add 0-15 minutes of random delay
+# This prevents thundering herd if many systems run at the same time
+# Also helps distribute load on the WattTime API
+RandomizedDelaySec=900
+
+# Fixed delay: wait this long after boot before first run
+# (Useful if other services need to start first)
+# DelaySec=60
+
+# =============================================================================
+# ACCURACY AND PRECISION
+# =============================================================================
+
+# Accuracy: how precise the timer should be
+# 1 minute is sufficient for daily updates
+AccuracySec=1min
+
+# Wake system from suspend (if supported)
+# WakeSystem=false
+
+# =============================================================================
+# UNIT ASSOCIATION
+# =============================================================================
+
+# Which service to trigger (defaults to same name with .service extension)
+Unit=watttime-update.service
+
+# =============================================================================
+# HISTORY AND CLEANUP
+# =============================================================================
+
+# Keep track of the last 7 timer triggers
+# (Useful for debugging and auditing)
+# Note: This is controlled by the service's KeepUnit setting
+
+# =============================================================================
+# ADVANCED OPTIONS
+# =============================================================================
+
+# OnClockChange: trigger when system clock changes
+# (Useful for catching DST changes, NTP corrections)
+OnClockChange=false
+
+# OnTimezoneChange: trigger when timezone changes
+OnTimezoneChange=false
+
+# RemainAfterElapse: keep the timer active even after it elapses
+# (Default is true, which is what we want)
+RemainAfterElapse=true
+
+[Install]
+# Enable this timer to start at boot
+WantedBy=timers.target

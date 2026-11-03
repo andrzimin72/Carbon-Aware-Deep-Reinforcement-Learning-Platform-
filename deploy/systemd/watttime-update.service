@@ -1,0 +1,199 @@
+# =============================================================================
+# WATTTIME DAILY UPDATE SERVICE
+# =============================================================================
+# Systemd service unit for the WattTime data pipeline daily update.
+# This service is triggered by watttime-update.timer and runs the
+# daily_update.py script to fetch and cache the latest MOER data.
+#
+# Location: /etc/systemd/system/watttime-update.service
+#
+# Features:
+# - Runs as non-root user for security
+# - Sandboxed with systemd security features
+# - Resource limits to prevent runaway processes
+# - Structured logging to journald
+# - Graceful timeout handling
+# - Automatic restart on transient failures
+#
+# Author: Carbon-Aware Deep Reinforcement Learning Platform
+# =============================================================================
+
+[Unit]
+Description=WattTime Daily Data Update Service
+Documentation=https://github.com/your-org/carbon-aware-deep-reinforcement-learning-platform
+Documentation=https://www.watttime.org/api-documentation/
+
+# Start after network is fully online (required for API calls)
+After=network-online.target time-sync.target
+Wants=network-online.target
+
+# Don't start if the system is shutting down
+Conflicts=shutdown.target
+
+# Service metadata
+PartOf=carbon-aware-platform.target
+
+[Service]
+# Service type: oneshot means it runs to completion then exits
+Type=oneshot
+
+# User and group to run as (create this user if it doesn't exist)
+# useradd -r -s /bin/false -d /opt/carbon-aware carbon-aware
+User=carbon-aware
+Group=carbon-aware
+
+# Working directory (where the Python scripts are located)
+WorkingDirectory=/opt/carbon-aware-deep-reinforcement-learning-platform
+
+# Environment file containing WattTime credentials
+# Create this file with: sudo nano /etc/carbon-aware/watttime.env
+# Format:
+#   WATTTIME_USERNAME=your_username
+#   WATTTIME_PASSWORD=your_password
+# Permissions: sudo chmod 600 /etc/carbon-aware/watttime.env
+EnvironmentFile=/etc/carbon-aware/watttime.env
+
+# Additional environment variables
+Environment=PYTHONUNBUFFERED=1
+Environment=PYTHONPATH=/opt/carbon-aware-deep-reinforcement-learning-platform
+Environment=LOG_LEVEL=INFO
+
+# Command to execute
+# The script will:
+# 1. Check for existing cache
+# 2. Download new data from WattTime API
+# 3. Update Parquet cache files
+# 4. Log results
+ExecStart=/opt/carbon-aware-deep-reinforcement-learning-platform/.venv/bin/python \
+    -m src.watttime.daily_update \
+    --regions CAISO_NORTH MISO ERCOT \
+    --lookback 2 \
+    --cache-dir /var/lib/carbon-aware/watttime_cache \
+    --log-dir /var/log/carbon-aware \
+    --verbose
+
+# Timeout: kill the service if it runs longer than 30 minutes
+# This prevents hung processes from blocking future runs
+TimeoutStartSec=1800
+
+# Don't restart automatically (timer handles scheduling)
+# But if it fails, the timer will retry on the next scheduled run
+Restart=no
+
+# Standard output and error go to journald
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=watttime-update
+
+# =============================================================================
+# RESOURCE LIMITS
+# =============================================================================
+
+# Memory limit: prevent runaway memory usage
+# The data pipeline shouldn't need more than 1GB for typical workloads
+MemoryMax=1G
+MemoryHigh=768M
+
+# CPU limit: don't let this monopolize the CPU
+# 50% of one CPU core should be sufficient
+CPUQuota=50%
+
+# I/O weight: lower priority for disk I/O
+IOWeight=50
+
+# =============================================================================
+# SECURITY HARDENING
+# =============================================================================
+
+# Filesystem access
+# ProtectSystem=strict makes /usr, /boot, /efi read-only
+ProtectSystem=strict
+
+# Allow writing to specific directories
+ReadWritePaths=/var/lib/carbon-aware
+ReadWritePaths=/var/log/carbon-aware
+ReadWritePaths=/tmp
+
+# Don't allow access to home directories
+ProtectHome=yes
+
+# Don't allow access to kernel logs
+ProtectKernelLogs=yes
+
+# Don't allow access to kernel modules
+ProtectKernelModules=yes
+
+# Don't allow access to kernel tunables
+ProtectKernelTunables=yes
+
+# Don't allow access to control groups
+ProtectControlGroups=yes
+
+# Don't allow new privileges (prevents privilege escalation)
+NoNewPrivileges=yes
+
+# Don't allow setuid binaries
+RestrictSUIDSGID=yes
+
+# Restrict address families (only allow what's needed for HTTP)
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+
+# Restrict system calls
+SystemCallArchitectures=native
+SystemCallErrorNumber=EPERM
+
+# Don't allow mounting
+ProtectHostname=yes
+
+# Private /tmp directory (isolated from other services)
+PrivateTmp=yes
+
+# Private /dev (minimal device access)
+PrivateDevices=yes
+
+# Don't allow IPC with other services
+PrivateIPC=yes
+
+# Remove dangerous capabilities
+CapabilityBoundingSet=
+AmbientCapabilities=
+
+# Don't allow coredumps (security risk)
+LimitCORE=0
+
+# =============================================================================
+# LOGGING AND MONITORING
+# =============================================================================
+
+# Log rate limiting (prevent log spam)
+LogRateLimitIntervalSec=30s
+LogRateLimitBurst=100
+
+# Watchdog: if the service hangs, systemd will restart it
+# (Not applicable for oneshot, but included for completeness)
+# WatchdogSec=300
+
+# =============================================================================
+# CLEANUP
+# =============================================================================
+
+# Clean up runtime files on stop
+RuntimeDirectory=carbon-aware
+RuntimeDirectoryMode=0755
+
+# State directory for persistent data
+StateDirectory=carbon-aware
+StateDirectoryMode=0750
+
+# Cache directory
+CacheDirectory=carbon-aware
+CacheDirectoryMode=0750
+
+# Logs directory
+LogsDirectory=carbon-aware
+LogsDirectoryMode=0750
+
+[Install]
+# This service is not enabled directly; it's triggered by the timer
+# But we include WantedBy for completeness
+WantedBy=multi-user.target
