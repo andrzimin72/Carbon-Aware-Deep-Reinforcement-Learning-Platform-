@@ -12,92 +12,92 @@ Conceptually (The Workload): 100% Swarm Orchestration. The word «Swarm» in the
 
 ### 3. What key tasks does it address?
 
-Data Ingestion & Alignment: Fetching, caching, and synchronizing real-time and historical grid emissions data (WattTime MOER) across multiple regions.
+a) Data Ingestion & Alignment: Fetching, caching, and synchronizing real-time and historical grid emissions data (WattTime MOER) across multiple regions.
 
-Temporal Pattern Recognition: Learning complex, non-linear grid dynamics (e.g., diurnal solar/wind patterns) implicitly, without relying on perfect external forecasts.
+b) Temporal Pattern Recognition: Learning complex, non-linear grid dynamics (e.g., diurnal solar/wind patterns) implicitly, without relying on perfect external forecasts.
 
-Real-Time Decision Making: Evaluating the state of the grid and the characteristics of a task to make millisecond-level scheduling decisions.
+c) Real-Time Decision Making: Evaluating the state of the grid and the characteristics of a task to make millisecond-level scheduling decisions.
 
-Operational Safeguarding: Enforcing strict guardrails (capacity limits, SLA protection, dynamic circuit breakers) to prevent the AI from making destructive or unstable decisions.
+d) Operational Safeguarding: Enforcing strict guardrails (capacity limits, SLA protection, dynamic circuit breakers) to prevent the AI from making destructive or unstable decisions.
 
-Auditability & Observability: Providing full transparency into every decision via shadow mode, structured JSONL logging, Prometheus metrics, and Grafana dashboards.
+e) Auditability & Observability: Providing full transparency into every decision via shadow mode, structured JSONL logging, Prometheus metrics, and Grafana dashboards.
 
 ### 4. What are its main functions?
 
-Automated Data Pipeline: Daily, incremental updates of regional carbon intensity data into a local Parquet cache.
+a) Automated Data Pipeline: Daily, incremental updates of regional carbon intensity data into a local Parquet cache.
 
-RL Environment Simulation: A Gymnasium-compatible environment that accurately models execution carbon, idle carbon, migration costs, and SLA penalties for training.
+b) RL Environment Simulation: A Gymnasium-compatible environment that accurately models execution carbon, idle carbon, migration costs, and SLA penalties for training.
 
-Policy Inference: A PyTorch-based recurrent neural network that maps a 33-dimensional observation vector to a probability distribution over available nodes.
+c) Policy Inference: A PyTorch-based recurrent neural network that maps a 33-dimensional observation vector to a probability distribution over available nodes.
 
-Kubernetes Pod Binding: Direct API interaction to schedule opted-in workloads, bypassing the default Kubernetes scheduler.
+d) Kubernetes Pod Binding: Direct API interaction to schedule opted-in workloads, bypassing the default Kubernetes scheduler.
 
-Shadow Mode Validation: A safe, non-executing runtime that proposes decisions and logs them for human review before production enablement.
+e) Shadow Mode Validation: A safe, non-executing runtime that proposes decisions and logs them for human review before production enablement.
 
-Interpretability Analysis: A suite of tools (t-SNE clustering, occlusion attribution, linear probing) to explain why the model made a specific decision.
+f) Interpretability Analysis: A suite of tools (t-SNE clustering, occlusion attribution, linear probing) to explain why the model made a specific decision.
 
 Risk management isn’t a bolt-on feature or an afterthought in this platform. It is a first-class, deeply integrated architectural pillar that operates across three distinct layers: Training (intrinsic), Inference (extrinsic), and Operations (process). Unlike 95% of academic Reinforcement Learning papers that assume a perfect, safe environment, this platform is explicitly designed for the messy, unpredictable reality of production infrastructure.
 
 ### 5. In which areas of industry can this software be used?
 
-Cloud Computing & Hyperscalers: Optimizing regional load balancing for maximum sustainability.
+a) Cloud Computing & Hyperscalers: Optimizing regional load balancing for maximum sustainability.
 
-High-Performance Computing (HPC) & AI/ML Clusters: Scheduling massive, delay-tolerant training jobs to run when and where the grid is cleanest.
+b) High-Performance Computing (HPC) & AI/ML Clusters: Scheduling massive, delay-tolerant training jobs to run when and where the grid is cleanest.
 
-Edge Computing & IoT: Managing distributed edge nodes that rely on varying local micro-grids or renewable sources.
+c) Edge Computing & IoT: Managing distributed edge nodes that rely on varying local micro-grids or renewable sources.
 
-Large Enterprise IT: Organizations with multi-region data centers facing strict internal or regulatory ESG (Environmental, Social, and Governance) mandates.
+d) Large Enterprise IT: Organizations with multi-region data centers facing strict internal or regulatory ESG (Environmental, Social, and Governance) mandates.
 
-Blockchain/Web3: Sustainable scheduling of validation nodes or batched transaction processing.
+e) Blockchain/Web3: Sustainable scheduling of validation nodes or batched transaction processing.
 
 ### 6. For which tasks is it best suited, and for which is it NOT recommended?
 
 #### 6.1. Best Suited For:
 
-Batch Processing & ETL Jobs: Data pipelines, nightly builds, and report generation that have flexible start windows.
+a) Batch Processing & ETL Jobs: Data pipelines, nightly builds, and report generation that have flexible start windows.
 
-Machine Learning Workloads: Distributed training jobs or offline inference batches that can tolerate minor geographic latency in exchange for massive carbon savings.
+b) Machine Learning Workloads: Distributed training jobs or offline inference batches that can tolerate minor geographic latency in exchange for massive carbon savings.
 
-Geo-Replicated Stateless Services: Microservices that can be seamlessly spun up in a different region without breaking user experience.
+c) Geo-Replicated Stateless Services: Microservices that can be seamlessly spun up in a different region without breaking user experience.
 
 #### 6.2. Not Recommended For:
 
-Ultra-Low-Latency Interactive Applications: High-frequency trading, real-time gaming, or critical user-facing APIs where even a 10ms geographic routing penalty is unacceptable.
+a) Ultra-Low-Latency Interactive Applications: High-frequency trading, real-time gaming, or critical user-facing APIs where even a 10ms geographic routing penalty is unacceptable.
 
-Strictly Stateful, Monolithic Databases: Systems that cannot be migrated or replicated across regions without massive network overhead and downtime.
+b) Strictly Stateful, Monolithic Databases: Systems that cannot be migrated or replicated across regions without massive network overhead and downtime.
 
-Single-Region Deployments: If an organization only has servers in one geographic location, spatial optimization is impossible. (Temporal optimization in a single region is better handled by simple, rule-based cron jobs, not complex RL).
+c) Single-Region Deployments: If an organization only has servers in one geographic location, spatial optimization is impossible. (Temporal optimization in a single region is better handled by simple, rule-based cron jobs, not complex RL).
 
 ### 7. What are the limitations regarding its use?
 
-External Data Dependency: The system’s efficacy is capped by the accuracy and uptime of the WattTime API. Prolonged API outages will trigger the circuit breaker, reverting the system to a conservative, suboptimal local scheduling mode.
+a) External Data Dependency: The system’s efficacy is capped by the accuracy and uptime of the WattTime API. Prolonged API outages will trigger the circuit breaker, reverting the system to a conservative, suboptimal local scheduling mode.
 
-Scope 2 Focus Only: It optimizes for purchased electricity emissions. It does not account for Scope 1 (e.g., on-site diesel backup generators) or the full Scope 3 embodied carbon of network transit and hardware manufacturing.
+b) Scope 2 Focus Only: It optimizes for purchased electricity emissions. It does not account for Scope 1 (e.g., on-site diesel backup generators) or the full Scope 3 embodied carbon of network transit and hardware manufacturing.
 Training Overhead: The model requires significant historical data and compute to train. A newly initialized model will perform poorly until it converges.
 
 Kubernetes Specificity: The execution layer is tightly coupled to the Kubernetes API. Adapting it to other orchestrators (like Slurm for HPC or Nomad) would require significant refactoring.
 
 ### 8. What are the most promising avenues for its future development?
 
-Explicit Forecast Integration: Feeding WattTime’s 24-48 hour forecast directly into the LSTM observation space, transitioning the agent from reactive to truly predictive.
+a) Explicit Forecast Integration: Feeding WattTime’s 24-48 hour forecast directly into the LSTM observation space, transitioning the agent from reactive to truly predictive.
 
-Multi-Objective Reinforcement Learning (MORL): Replacing the static weighted-sum reward function with Pareto-front optimization, allowing operators to dynamically adjust a «carbon vs. latency» slider at runtime.
+b) Multi-Objective Reinforcement Learning (MORL): Replacing the static weighted-sum reward function with Pareto-front optimization, allowing operators to dynamically adjust a «carbon vs. latency» slider at runtime.
 
-Federated Learning: Enabling multiple organizations to collaboratively train a global, robust scheduling policy without sharing proprietary workload or location data.
+c) Federated Learning: Enabling multiple organizations to collaboratively train a global, robust scheduling policy without sharing proprietary workload or location data.
 
-Hardware-Aware Scheduling: Incorporating node-specific power draw profiles (e.g., CPU vs. GPU vs. TPU) to optimize for «performance-per-watt» rather than just «carbon-per-watt».
+d) Hardware-Aware Scheduling: Incorporating node-specific power draw profiles (e.g., CPU vs. GPU vs. TPU) to optimize for «performance-per-watt» rather than just «carbon-per-watt».
 
 ### 9. What AI software products are utilized within the platform?
 
-PyTorch: The core deep learning framework for model definition and inference.
+a) PyTorch: The core deep learning framework for model definition and inference.
 
-RecurrentPPO (Proximal Policy Optimization): The specific RL algorithm, chosen for its stability, sample efficiency, and clipped surrogate objective.
+b) RecurrentPPO (Proximal Policy Optimization): The specific RL algorithm, chosen for its stability, sample efficiency, and clipped surrogate objective.
 
-LSTM (Long Short-Term Memory): The neural network architecture used to encode temporal grid dynamics into a hidden state.
+c) LSTM (Long Short-Term Memory): The neural network architecture used to encode temporal grid dynamics into a hidden state.
 
-Gymnasium: The standard OpenAI API used to define the reinforcement learning environment.
+d) Gymnasium: The standard OpenAI API used to define the reinforcement learning environment.
 
-Scikit-Learn: Used exclusively in the interpretability module for t-SNE, PCA, and Ridge regression (linear probing).
+e) Scikit-Learn: Used exclusively in the interpretability module for t-SNE, PCA, and Ridge regression (linear probing).
 
 ### 10. How and to what extent are encryption and cryptography used within this platform?
 
@@ -111,33 +111,33 @@ This proves we understand exactly where our code's responsibility ends and where
 
 #### 11.1. The Competitive Landscape: Who Exists and Where Are They Used?
 
-Google Carbon-Intelligent Compute: Shifts flexible workloads across regions and times. (Status: Highly effective, but strictly proprietary and internal to Google).
+a) Google Carbon-Intelligent Compute: Shifts flexible workloads across regions and times. (Status: Highly effective, but strictly proprietary and internal to Google).
 
-Microsoft «Shift» / Azure Sustainability: Provides carbon data to developers and supports temporal shifting. (Status: Lacks a fully autonomous, RL-driven spatial scheduler).
+b) Microsoft «Shift» / Azure Sustainability: Provides carbon data to developers and supports temporal shifting. (Status: Lacks a fully autonomous, RL-driven spatial scheduler).
 
-Open-Source «Green» Schedulers (e.g., Kube-green): (Status: Mostly focus on scaling down idle nodes or simple rule-based scaling, not intelligent, RL-based spatial-temporal Pod placement).
+c) Open-Source «Green» Schedulers (e.g., Kube-green): (Status: Mostly focus on scaling down idle nodes or simple rule-based scaling, not intelligent, RL-based spatial-temporal Pod placement).
 
-Commercial FinOps/APM Tools (e.g., Vantage, CloudHealth): (Status: Provide carbon reporting and manual recommendations, but do not autonomously execute scheduling decisions).
+d) Commercial FinOps/APM Tools (e.g., Vantage, CloudHealth): (Status: Provide carbon reporting and manual recommendations, but do not autonomously execute scheduling decisions).
 
 #### 11.2. What Are Our Competitive Advantages?
 
-True Autonomy: Unlike recommendation engines, our platform executes decisions safely via the K8s API.
+a) True Autonomy: Unlike recommendation engines, our platform executes decisions safely via the K8s API.
 
-Temporal Memory (LSTM): Unlike simple threshold-based rule engines, our agent learns implicit grid trends, making it robust even when forecasts are missing or wrong.
+b) Temporal Memory (LSTM): Unlike simple threshold-based rule engines, our agent learns implicit grid trends, making it robust even when forecasts are missing or wrong.
 
-Production-Grade Risk Management: The dynamic circuit breaker and shadow mode are rarely seen in academic RL papers. This is what makes the system viable for enterprise deployment.
+c) Production-Grade Risk Management: The dynamic circuit breaker and shadow mode are rarely seen in academic RL papers. This is what makes the system viable for enterprise deployment.
 
-Built-in Interpretability: The dedicated toolkit bridges the «black box» trust gap that prevents most AI schedulers from passing enterprise security and SRE reviews.
+d) Built-in Interpretability: The dedicated toolkit bridges the «black box» trust gap that prevents most AI schedulers from passing enterprise security and SRE reviews.
 
 ### 12. Economic and Financial Impact (The ROI)
 
-Carbon Tax/Credit Avoidance: As carbon pricing mechanisms (e.g., EU ETS) expand, a 16.6% reduction in a 100MW data center saves ~1,200 tonnes of CO₂e annually. At $50/tonne, that is $60,000/year in direct savings, plus avoided Scope 2 reporting penalties.
+a) Carbon Tax/Credit Avoidance: As carbon pricing mechanisms (e.g., EU ETS) expand, a 16.6% reduction in a 100MW data center saves ~1,200 tonnes of CO₂e annually. At $50/tonne, that is $60,000/year in direct savings, plus avoided Scope 2 reporting penalties.
 
-REC Optimization: By running when the grid is naturally green, organizations reduce their reliance on purchasing expensive, unbundled Renewable Energy Certificates (RECs) to meet sustainability goals.
+b) REC Optimization: By running when the grid is naturally green, organizations reduce their reliance on purchasing expensive, unbundled Renewable Energy Certificates (RECs) to meet sustainability goals.
 
-Compute Cost Arbitrage: In many regions, low-carbon periods (midday solar, overnight wind) correlate with lower wholesale electricity prices. Carbon-aware scheduling often inadvertently optimizes for energy cost as well.
+c) Compute Cost Arbitrage: In many regions, low-carbon periods (midday solar, overnight wind) correlate with lower wholesale electricity prices. Carbon-aware scheduling often inadvertently optimizes for energy cost as well.
 
-Payback Period: Given the software is custom-built/open-source, the primary costs are engineering time and minimal inference compute. The ROI is typically realized in < 12 months for medium-to-large deployments.
+d) Payback Period: Given the software is custom-built/open-source, the primary costs are engineering time and minimal inference compute. The ROI is typically realized in < 12 months for medium-to-large deployments.
 
 ### 13. Honest Limitations and Reality Check
 
