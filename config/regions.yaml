@@ -1,0 +1,231 @@
+# =============================================================================
+# WATTTIME REGION CONFIGURATION
+# =============================================================================
+#
+# Defines the mapping between WattTime regions, Kubernetes nodes, and
+# physical data center locations. This file is the single source of truth
+# for the geo-distributed scheduling topology.
+#
+# Usage:
+#   - Loaded by all components that need region/node mapping
+#   - Must be kept in sync with actual infrastructure
+#   - Region codes must match WattTime API's expected values
+#
+## =============================================================================
+
+
+# -----------------------------------------------------------------------------
+# GLOBAL SETTINGS
+# -----------------------------------------------------------------------------
+
+global:
+  # WattTime API configuration
+  watttime:
+    api_version: "v3"                    # "v2" or "v3"
+    base_url: "https://api.watttime.org/v3"
+    signal_type: "MOER"                  # "MOER" (marginal) or "CO2_AVERAGE"
+    units: "g"                           # "g" (gCO2e/MWh) or "lb" (lbCO2e/MWh)
+    
+    # Rate limiting
+    requests_per_minute: 30              # Respect API rate limits
+    retry_on_failure: true
+    max_retries: 3
+    
+    # Credentials (prefer environment variables in production)
+    # username: "${WATTTIME_USERNAME}"
+    # password: "${WATTTIME_PASSWORD}"
+  
+  # Default safety thresholds (can be overridden per-region)
+  defaults:
+    max_utilization: 0.85                # Don't schedule if node > 85% util
+    clean_threshold_gco2_per_kwh: 250    # Below this = "clean" energy
+    dirty_threshold_gco2_per_kwh: 500    # Above this = "dirty" energy
+
+
+# -----------------------------------------------------------------------------
+# REGION DEFINITIONS
+# -----------------------------------------------------------------------------
+# Each region represents a geo-distributed data center location.
+# The 'watttime_code' must be a valid WattTime balancing authority.
+# The 'k8s_node' must match an actual Kubernetes node name.
+
+regions:
+  
+  # -------------------------------------------------------------------------
+  # California ISO (Northern)
+  # -------------------------------------------------------------------------
+  - name: "caiso_north"
+    display_name: "California (Northern)"
+    
+    # WattTime configuration
+    watttime_code: "CAISO_NORTH"
+    watttime_timezone: "America/Los_Angeles"
+    
+    # Kubernetes mapping
+    k8s_node: "node-caiso"
+    k8s_namespace: "carbon-aware"
+    
+    # Physical location (for latency calculations)
+    location:
+      latitude: 37.7749
+      longitude: -122.4194
+      city: "San Francisco"
+      state: "CA"
+      country: "US"
+    
+    # Grid characteristics (informational, not used by scheduler)
+    grid_profile:
+      type: "mixed"                      # "solar", "wind", "hydro", "mixed", "coal"
+      renewable_fraction: 0.45           # Approximate annual average
+      typical_ci_range: [150, 500]       # gCO2e/kWh (min, max)
+      peak_solar_hour: 13                # Hour of day (local time)
+      peak_wind_hour: 2                  # Hour of day (local time)
+    
+    # Region-specific overrides (optional)
+    overrides:
+      max_utilization: 0.90              # Allow higher util in CA (greener grid)
+      priority: 1                        # Lower = higher priority for scheduling
+    
+    # Metadata
+    metadata:
+      provider: "AWS"
+      instance_type: "m5.2xlarge"
+      cpu_cores: 8
+      memory_gb: 32
+      gpu: false
+      notes: "Primary West Coast location, strong solar profile"
+  
+  
+  # -------------------------------------------------------------------------
+  # Midcontinent ISO (Midwest)
+  # -------------------------------------------------------------------------
+  - name: "miso"
+    display_name: "Midwest (MISO)"
+    
+    watttime_code: "MISO"
+    watttime_timezone: "America/Chicago"
+    
+    k8s_node: "node-miso"
+    k8s_namespace: "carbon-aware"
+    
+    location:
+      latitude: 41.8781
+      longitude: -87.6298
+      city: "Chicago"
+      state: "IL"
+      country: "US"
+    
+    grid_profile:
+      type: "wind"
+      renewable_fraction: 0.30
+      typical_ci_range: [200, 600]
+      peak_solar_hour: 13
+      peak_wind_hour: 3
+    
+    overrides:
+      max_utilization: 0.85
+      priority: 2
+    
+    metadata:
+      provider: "GCP"
+      instance_type: "n2-standard-8"
+      cpu_cores: 8
+      memory_gb: 32
+      gpu: false
+      notes: "Strong wind profile, good for overnight batch jobs"
+  
+  
+  # -------------------------------------------------------------------------
+  # ERCOT (Texas)
+  # -------------------------------------------------------------------------
+  - name: "ercot"
+    display_name: "Texas (ERCOT)"
+    
+    watttime_code: "ERCOT"
+    watttime_timezone: "America/Chicago"
+    
+    k8s_node: "node-ercot"
+    k8s_namespace: "carbon-aware"
+    
+    location:
+      latitude: 30.2672
+      longitude: -97.7431
+      city: "Austin"
+      state: "TX"
+      country: "US"
+    
+    grid_profile:
+      type: "mixed"
+      renewable_fraction: 0.35
+      typical_ci_range: [250, 700]
+      peak_solar_hour: 14
+      peak_wind_hour: 2
+    
+    overrides:
+      max_utilization: 0.80              # More conservative (volatile grid)
+      priority: 3
+    
+    metadata:
+      provider: "Azure"
+      instance_type: "Standard_D8s_v5"
+      cpu_cores: 8
+      memory_gb: 32
+      gpu: true
+      gpu_model: "NVIDIA A100"
+      notes: "GPU node for ML workloads, volatile wind/solar mix"
+
+
+# -----------------------------------------------------------------------------
+# LATENCY MATRIX (optional)
+# -----------------------------------------------------------------------------
+# Pre-computed network latency between regions (in milliseconds).
+# If not provided, the system will estimate based on geographic distance.
+
+latency_matrix:
+  # Format: [from_region, to_region, latency_ms]
+  - ["caiso_north", "miso", 60]
+  - ["caiso_north", "ercot", 50]
+  - ["miso", "ercot", 40]
+  - ["miso", "caiso_north", 60]
+  - ["ercot", "caiso_north", 50]
+  - ["ercot", "miso", 40]
+
+
+# -----------------------------------------------------------------------------
+# FALLBACK CONFIGURATION
+# -----------------------------------------------------------------------------
+# What to do when a region is unavailable or data is stale.
+
+fallback:
+  # If a region's data is stale for > N hours, exclude it from scheduling
+  max_staleness_hours: 2
+  
+  # If all regions are unavailable, use this default behavior
+  default_action: "local"                # "local" = schedule on node 0
+  # Alternative: "delay" = queue the task until data recovers
+  
+  # Regions marked as "critical" will never be excluded, even if stale
+  critical_regions:
+    - "caiso_north"
+
+
+# -----------------------------------------------------------------------------
+# VALIDATION
+# -----------------------------------------------------------------------------
+# Constraints that must be satisfied by this configuration.
+
+validation:
+  # All regions must have unique names
+  unique_region_names: true
+  
+  # All WattTime codes must be unique
+  unique_watttime_codes: true
+  
+  # All K8s nodes must be unique
+  unique_k8s_nodes: true
+  
+  # Latency matrix must be symmetric
+  symmetric_latency: true
+  
+  # Priority values must be unique (if provided)
+  unique_priorities: true

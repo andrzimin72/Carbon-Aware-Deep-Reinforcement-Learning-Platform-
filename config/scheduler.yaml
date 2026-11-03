@@ -1,0 +1,368 @@
+# =============================================================================
+# SCHEDULER PARAMETERS & THRESHOLDS
+# =============================================================================
+#
+# Central configuration for the carbon-aware scheduling system.
+# Controls the PPO agent, safety gates, environment, and runtime behavior.
+#
+# Usage:
+#   - Loaded by training scripts, inference runners, and K8s controller
+#   - Can be overridden by CLI arguments or environment variables
+#   - Changes require restart of running components
+#
+# =============================================================================
+
+
+# -----------------------------------------------------------------------------
+# PPO AGENT CONFIGURATION
+# -----------------------------------------------------------------------------
+# Hyperparameters for the recurrent PPO agent.
+
+agent:
+  # Architecture
+  architecture:
+    hidden_dim: 64                       # LSTM hidden dimension
+    num_lstm_layers: 1                   # Number of LSTM layers
+    window_size: 5                       # Historical window (hours)
+    
+    # Actor network
+    actor_layers: [64, 32]               # Hidden layer sizes
+    actor_activation: "relu"             # "relu", "tanh", "elu"
+    
+    # Critic network
+    critic_layers: [64, 32]
+    critic_activation: "relu"
+  
+  # PPO hyperparameters
+  ppo:
+    learning_rate: 3.0e-4                # Adam optimizer LR
+    gamma: 0.99                          # Discount factor
+    gae_lambda: 0.95                     # GAE lambda (if using GAE)
+    eps_clip: 0.2                        # PPO clipping parameter
+    k_epochs: 4                          # Update epochs per rollout
+    entropy_coef: 0.01                   # Entropy bonus coefficient
+    value_loss_coef: 0.5                 # Value loss coefficient
+    max_grad_norm: 0.5                   # Gradient clipping
+  
+  # Training
+  training:
+    max_episodes: 500                    # Max training episodes
+    tasks_per_episode: 24                # Tasks per episode
+    batch_size: 64                       # Mini-batch size for updates
+    rollout_buffer_size: 2048            # Experience buffer size
+    
+    # Early stopping
+    early_stopping:
+      enabled: true
+      patience: 50                       # Episodes without improvement
+      min_delta: 0.01                    # Minimum improvement threshold
+    
+    # Checkpointing
+    checkpointing:
+      enabled: true
+      save_every_n_episodes: 50
+      keep_last_n: 5                     # Keep last N checkpoints
+      save_best: true                    # Save best model separately
+  
+  # Evaluation
+  evaluation:
+    eval_every_n_episodes: 50
+    eval_episodes: 10
+    eval_seed_offset: 1000               # Different seed for eval
+
+
+# -----------------------------------------------------------------------------
+# SAFETY GATE CONFIGURATION
+# -----------------------------------------------------------------------------
+# Constraints applied to the agent's decisions before execution.
+
+safety_gate:
+  # Utilization constraints
+  utilization:
+    max_utilization: 0.85                # Don't schedule if node > 85% util
+    critical_utilization: 0.95           # Emergency threshold
+    
+    # Hysteresis: once a node hits critical, require it to drop below
+    # max_utilization before scheduling again
+    hysteresis_enabled: true
+  
+  # Data freshness
+  data_freshness:
+    max_staleness_hours: 2.0             # Max age of WattTime data
+    max_forecast_age_hours: 2.0          # Max age of forecast data
+    
+    # If data is stale, fall back to this behavior
+    stale_data_action: "local"           # "local", "delay", "reject"
+  
+  # Task-specific rules
+  task_rules:
+    # Interactive tasks: always schedule locally for low latency
+    interactive:
+      force_local: true
+      local_node: 0                      # Index of "local" node
+      max_latency_ms: 100
+    
+    # Batch tasks: can be delayed for carbon savings
+    batch:
+      force_local: false
+      max_delay_hours: 12                # Max acceptable delay
+      carbon_weight: 0.8                 # Weight for carbon in reward
+      latency_weight: 0.1
+      migration_weight: 0.1
+    
+    # Stateful tasks: penalize migration heavily
+    stateful:
+      force_local: false
+      migration_penalty_multiplier: 3.0  # 3x normal migration penalty
+      min_dwell_time_hours: 2            # Don't move for at least 2h
+  
+  # Anti-flapping: prevent rapid migrations
+  anti_flapping:
+    enabled: true
+    min_dwell_time_hours: 2              # Minimum time on a node before moving
+    max_migrations_per_hour: 3           # Max migrations per task per hour
+  
+  # Capacity guards
+  capacity:
+    # Don't schedule if it would push node over this utilization
+    max_post_schedule_utilization: 0.90
+    
+    # Reserve capacity for interactive tasks
+    interactive_reserve_fraction: 0.20   # Keep 20% free for interactive
+
+
+# -----------------------------------------------------------------------------
+# ENVIRONMENT CONFIGURATION
+# -----------------------------------------------------------------------------
+# Settings for the Gymnasium environment used in training and evaluation.
+
+environment:
+  # Carbon accounting
+  carbon:
+    # Power model (simplified)
+    idle_power_watts: 150                # Watts at 0% utilization
+    exec_power_watts: 300                # Watts at 100% utilization
+    
+    # Migration overhead
+    migration_network_energy_j_per_mb: 0.05
+    migration_transient_power_watts: 150
+    migration_transient_time_sec: 60
+    
+    # Units
+    ci_units: "gCO2e_per_kWh"
+  
+  # Rewards and penalties
+  rewards:
+    # Base reward = -(carbon_cost + migration_penalty + sla_penalty)
+    
+    # Migration penalty (flat or proportional)
+    migration_penalty_type: "flat"       # "flat" or "proportional"
+    migration_penalty_flat_gco2: 15.0    # Flat penalty in gCO2e
+    
+    # SLA penalty
+    sla_penalty_type: "step"             # "step" or "linear"
+    sla_penalty_step_gco2: 50.0          # Penalty for any SLA violation
+    sla_penalty_linear_factor: 0.1       # For linear: penalty = factor * (latency - sla)
+    
+    # Delay penalty (for batch tasks that wait)
+    delay_penalty_per_hour_gco2: 5.0
+  
+  # Task generation (for training)
+  task_generation:
+    # Task profiles
+    profiles:
+      interactive:
+        probability: 0.3
+        size_mb_range: [10, 100]
+        exec_time_sec_range: [10, 60]
+        sla_latency_ms_range: [50, 150]
+      
+      batch:
+        probability: 0.5
+        size_mb_range: [50, 500]
+        exec_time_sec_range: [60, 600]
+        sla_latency_ms_range: [500, 2000]
+      
+      stateful:
+        probability: 0.2
+        size_mb_range: [100, 1000]
+        exec_time_sec_range: [300, 1800]
+        sla_latency_ms_range: [200, 500]
+    
+    # Source node distribution
+    source_node:
+      new_task_probability: 0.3          # 30% are brand new tasks
+      existing_task_probability: 0.7     # 70% are migrations
+  
+  # Observation normalization
+  normalization:
+    ci_scale: 800.0                      # Divide CI by this (gCO2e/kWh)
+    ci_clip_max: 800.0
+    utilization_clip: [0.0, 1.0]
+    
+    # Task features
+    task_size_mb_scale: 500.0
+    task_exec_time_sec_scale: 600.0
+    task_sla_latency_ms_scale: 200.0
+
+
+# -----------------------------------------------------------------------------
+# TRAINING CONFIGURATION
+# -----------------------------------------------------------------------------
+# Settings for the training pipeline.
+
+training:
+  # Data
+  data:
+    replay_buffer_path: "./watttime_cache"
+    train_fraction: 0.8                  # 80% train, 20% test
+    min_train_hours: 100                 # Minimum hours for training
+    min_test_hours: 50                   # Minimum hours for testing
+  
+  # Reproducibility
+  seeds:
+    base_seed: 42
+    num_seeds: 5                         # Run with 5 different seeds
+    seed_list: [42, 123, 456, 789, 1024]
+  
+  # Experiment tracking
+  experiment_tracking:
+    enabled: false
+    tool: "wandb"                        # "wandb" or "tensorboard"
+    project_name: "carbon-aware-scheduling"
+    run_name: null                       # Auto-generated if null
+    tags: ["lstm", "ppo", "carbon-aware"]
+  
+  # Output
+  output:
+    checkpoint_dir: "./checkpoints"
+    log_dir: "./logs/training"
+    tensorboard_dir: "./logs/tensorboard"
+
+
+# -----------------------------------------------------------------------------
+# INFERENCE CONFIGURATION
+# -----------------------------------------------------------------------------
+# Settings for shadow-mode and production inference.
+
+inference:
+  # Shadow mode
+  shadow:
+    decision_interval_sec: 300           # 5 minutes
+    warmup_hours: 24                     # Hours of history for LSTM
+    output_file: "./shadow_decisions.jsonl"
+    max_decisions: null                  # null = run forever
+  
+  # Kubernetes controller
+  kubernetes:
+    namespace: "carbon-aware"
+    watch_timeout_sec: 300
+    reconnect_delay_sec: 5
+    
+    # Pod annotation keys
+    annotations:
+      enabled: "carbon-aware.io/enabled"
+      profile: "carbon-aware.io/profile"
+      size_mb: "carbon-aware.io/size-mb"
+      exec_time_sec: "carbon-aware.io/exec-time-sec"
+      sla_latency_ms: "carbon-aware.io/sla-latency-ms"
+      source_node: "carbon-aware.io/source-node"
+      decision: "carbon-aware.io/decision"
+
+
+# -----------------------------------------------------------------------------
+# LOGGING CONFIGURATION
+# -----------------------------------------------------------------------------
+
+logging:
+  # Global settings
+  level: "INFO"                          # "DEBUG", "INFO", "WARNING", "ERROR"
+  format: "%(asctime)s [%(levelname)s] %(name)s: %(message)s"
+  date_format: "%Y-%m-%d %H:%M:%S"
+  
+  # Per-module overrides
+  modules:
+    watttime_client: "INFO"
+    k8s_controller: "INFO"
+    shadow_runner: "INFO"
+    ppo_agent: "WARNING"                 # Quiet down training logs
+    matplotlib: "WARNING"
+    urllib3: "WARNING"
+  
+  # File logging
+  file:
+    enabled: true
+    path: "./logs/app.log"
+    max_size_mb: 100
+    backup_count: 10
+  
+  # Structured logging (JSON)
+  structured:
+    enabled: false
+    path: "./logs/app.jsonl"
+
+
+# -----------------------------------------------------------------------------
+# MONITORING & METRICS
+# -----------------------------------------------------------------------------
+
+monitoring:
+  # Prometheus metrics
+  prometheus:
+    enabled: false
+    port: 8000
+    path: "/metrics"
+    
+    # Metrics to expose
+    metrics:
+      - "carbon_aware_decisions_total"
+      - "carbon_aware_decision_latency_seconds"
+      - "carbon_aware_grid_ci_gco2_per_kwh"
+      - "carbon_aware_node_utilization"
+      - "carbon_aware_sla_violations_total"
+  
+  # Health checks
+  health_check:
+    enabled: false
+    port: 8080
+    path: "/health"
+    
+    # Checks to perform
+    checks:
+      - "watttime_api_connectivity"
+      - "kubernetes_api_connectivity"
+      - "policy_loaded"
+      - "grid_feed_healthy"
+
+
+# -----------------------------------------------------------------------------
+# ADVANCED / EXPERIMENTAL
+# -----------------------------------------------------------------------------
+
+advanced:
+  # Forecast integration
+  forecast:
+    enabled: false
+    horizon_hours: 24
+    confidence_discount_factor: 0.1      # Exponential decay per hour
+    
+    # How to use forecasts
+    mode: "baseline_only"                # "baseline_only", "agent_input", "both"
+  
+  # Multi-objective optimization
+  multi_objective:
+    enabled: false
+    method: "weighted_sum"               # "weighted_sum", "pareto", "constraint"
+    
+    # Weights (must sum to 1.0 for weighted_sum)
+    weights:
+      carbon: 0.7
+      latency: 0.2
+      migration: 0.1
+  
+  # Embodied carbon
+  embodied_carbon:
+    enabled: false
+    # TODO: Implement embodied carbon accounting
+    # This would track the carbon cost of hardware manufacturing
+    # and amortize it over the hardware's lifetime
