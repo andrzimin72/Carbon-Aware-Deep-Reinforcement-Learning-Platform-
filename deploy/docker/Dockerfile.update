@@ -1,0 +1,114 @@
+# =============================================================================
+# WATTTIME UPDATER — DOCKERFILE
+# =============================================================================
+# Lightweight image for the daily data update job.
+# Does NOT include PyTorch — only needs the data pipeline dependencies.
+# Much smaller than the controller image (~200MB vs ~1.5GB).
+#
+# Build:
+#   docker build -f deploy/docker/Dockerfile.update -t carbon-aware-updater:latest .
+#
+# Run (one-shot):
+#   docker run --rm \
+#       --env-file .env \
+#       -v $(pwd)/watttime_cache:/app/watttime_cache \
+#       carbon-aware-updater:latest
+#
+# Author: Carbon-Aware Deep Reinforcement Learning Platform
+# =============================================================================
+
+
+# -----------------------------------------------------------------------------
+# STAGE 1: Base
+# -----------------------------------------------------------------------------
+ARG PYTHON_VERSION=3.11
+FROM python:${PYTHON_VERSION}-slim AS base
+
+# Build arguments
+ARG APP_VERSION=1.0.0
+ARG BUILD_DATE
+ARG VCS_REF
+
+# OCI image labels
+LABEL org.opencontainers.image.title="WattTime Updater"
+LABEL org.opencontainers.image.description="Daily WattTime data pipeline updater"
+LABEL org.opencontainers.image.vendor="Carbon-Aware Deep Reinforcement Learning Platform"
+LABEL org.opencontainers.image.version="${APP_VERSION}"
+LABEL org.opencontainers.image.created="${BUILD_DATE}"
+LABEL org.opencontainers.image.revision="${VCS_REF}"
+LABEL org.opencontainers.image.source="https://github.com/your-org/carbon-aware-deep-reinforcement-learning-platform"
+LABEL org.opencontainers.image.licenses="MIT"
+
+# Environment variables
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PIP_NO_CACHE_DIR=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    APP_HOME=/app \
+    PYTHONPATH=/app
+
+# Install system dependencies (minimal set)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        curl \
+        ca-certificates \
+        tini \
+    && rm -rf /var/lib/apt/lists/*
+
+# Create non-root user
+RUN groupadd -r -g 1000 carbon-aware \
+    && useradd -r -u 1000 -g carbon-aware -d /app -s /bin/false carbon-aware
+
+WORKDIR ${APP_HOME}
+
+
+# -----------------------------------------------------------------------------
+# STAGE 2: Dependencies (lightweight — no PyTorch)
+# -----------------------------------------------------------------------------
+FROM base AS dependencies
+
+# Copy requirements
+COPY requirements.txt .
+
+# Install ONLY the data pipeline dependencies (not PyTorch, not kubernetes)
+# This keeps the image small (~200MB vs ~1.5GB)
+RUN pip install --no-cache-dir \
+        numpy>=1.24,<2.0 \
+        pandas>=2.1,<3.0 \
+        pyarrow>=14.0,<16.0 \
+        requests>=2.31,<3.0 \
+        urllib3>=2.0,<3.0 \
+        tqdm>=4.66,<5.0 \
+        python-dotenv>=1.0,<2.0
+
+
+# -----------------------------------------------------------------------------
+# STAGE 3: Application
+# -----------------------------------------------------------------------------
+FROM dependencies AS application
+
+# Copy ONLY the watttime module (no ML code needed)
+COPY src/watttime/ ./src/watttime/
+
+# Create __init__.py for src package
+RUN mkdir -p ./src && touch ./src/__init__.py
+
+# Copy entrypoint
+COPY deploy/docker/entrypoint.sh /usr/local/bin/entrypoint.sh
+RUN chmod +x /usr/local/bin/entrypoint.sh
+
+# Create required directories
+RUN mkdir -p /app/watttime_cache /app/logs \
+    && chown -R carbon-aware:carbon-aware /app
+
+# Switch to non-root user
+USER carbon-aware
+
+# Health check (simple — just verify Python can import the module)
+HEALTHCHECK --interval=60s --timeout=5s --start-period=10s --retries=3 \
+    CMD python -c "from src.watttime.pipeline import WattTimeDataPipeline" || exit 1
+
+# Use tini as PID 1
+ENTRYPOINT ["tini", "--"]
+
+# Default command: run the updater
+CMD ["/usr/local/bin/entrypoint.sh", "update"]

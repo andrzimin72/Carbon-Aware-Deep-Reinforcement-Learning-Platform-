@@ -1,0 +1,264 @@
+# =============================================================================
+# LOCAL DEVELOPMENT STACK — DOCKER COMPOSE
+# =============================================================================
+# Complete local development environment for the Carbon-Aware Deep Reinforcement Learning Platform.
+# Includes the controller, updater, Prometheus, and Grafana with auto-loaded
+# Carbon-Aware dashboards.
+#
+# Usage:
+#   docker-compose up -d                  # Start all services
+#   docker-compose logs -f controller     # View controller logs
+#   docker-compose down                   # Stop all services
+#   docker-compose up -d --build controller  # Rebuild after code changes
+#
+# Dashboards:
+#   Grafana:    http://localhost:3000  (admin/admin)
+#   Prometheus: http://localhost:9090
+#   Controller metrics: http://localhost:8000/metrics
+#   Controller health:  http://localhost:8080/health
+#
+# Prerequisites:
+#   - .env file with WATTTIME_USERNAME and WATTTIME_PASSWORD
+#   - Trained checkpoint in ./checkpoints/ppo_window5.pt
+#
+# =============================================================================
+
+version: "3.9"
+
+# =============================================================================
+# NETWORKS
+# =============================================================================
+networks:
+  carbon-aware-net:
+    driver: bridge
+    name: carbon-aware-net
+
+  monitoring-net:
+    driver: bridge
+    name: carbon-aware-monitoring
+
+# =============================================================================
+# VOLUMES
+# =============================================================================
+volumes:
+  watttime-cache:
+    name: carbon-aware-cache
+  prometheus-data:
+    name: carbon-aware-prometheus
+  grafana-data:
+    name: carbon-aware-grafana
+
+# =============================================================================
+# SERVICES
+# =============================================================================
+services:
+
+  # ---------------------------------------------------------------------------
+  # CONTROLLER — Shadow-mode inference (simulated locally)
+  # ---------------------------------------------------------------------------
+  controller:
+    build:
+      context: ../..
+      dockerfile: deploy/docker/Dockerfile
+      args:
+        PYTHON_VERSION: "3.11"
+        PYTORCH_INDEX_URL: "https://download.pytorch.org/whl/cpu"
+    image: carbon-aware-controller:latest
+    container_name: carbon-aware-controller
+
+    command: ["shadow", "--interval", "60", "--max-decisions", "100",
+              "--metrics-port", "8000", "--health-check-port", "8080"]
+
+    environment:
+      - WATTTIME_USERNAME=${WATTTIME_USERNAME}
+      - WATTTIME_PASSWORD=${WATTTIME_PASSWORD}
+      - PYTHONUNBUFFERED=1
+      - LOG_LEVEL=INFO
+      - REGIONS=CAISO_NORTH,MISO,ERCOT
+
+    volumes:
+      - watttime-cache:/app/watttime_cache
+      - ../../checkpoints:/app/checkpoints:ro
+      - ../../logs/controller:/app/logs
+      - ../../outputs:/app/outputs
+      - ../../shadow_decisions.jsonl:/app/shadow_decisions.jsonl
+
+    ports:
+      - "8000:8000"   # Prometheus metrics
+      - "8080:8080"   # Health check
+
+    networks:
+      - carbon-aware-net
+      - monitoring-net
+
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 2G
+        reservations:
+          cpus: "0.25"
+          memory: 512M
+
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 60s
+
+    restart: unless-stopped
+
+    depends_on:
+      updater:
+        condition: service_completed_successfully
+
+    labels:
+      - "prometheus-job=carbon-aware-controller"
+      - "prometheus-port=8000"
+
+
+  # ---------------------------------------------------------------------------
+  # UPDATER — Daily WattTime data update (one-shot)
+  # ---------------------------------------------------------------------------
+  updater:
+    build:
+      context: ../..
+      dockerfile: deploy/docker/Dockerfile.update
+      args:
+        PYTHON_VERSION: "3.11"
+    image: carbon-aware-updater:latest
+    container_name: carbon-aware-updater
+
+    environment:
+      - WATTTIME_USERNAME=${WATTTIME_USERNAME}
+      - WATTTIME_PASSWORD=${WATTTIME_PASSWORD}
+      - PYTHONUNBUFFERED=1
+      - LOG_LEVEL=INFO
+      - REGIONS=CAISO_NORTH,MISO,ERCOT
+      - LOOKBACK_DAYS=7
+
+    volumes:
+      - watttime-cache:/app/watttime_cache
+      - ../../logs/updater:/app/logs
+
+    networks:
+      - carbon-aware-net
+
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 1G
+        reservations:
+          cpus: "0.1"
+          memory: 256M
+
+
+  # ---------------------------------------------------------------------------
+  # PROMETHEUS — Metrics collection
+  # ---------------------------------------------------------------------------
+  prometheus:
+    image: prom/prometheus:v2.48.0
+    container_name: carbon-aware-prometheus
+
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+
+    ports:
+      - "9090:9090"
+
+    networks:
+      - monitoring-net
+
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 512M
+
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+      - "--storage.tsdb.retention.time=7d"
+      - "--web.console.libraries=/usr/share/prometheus/console_libraries"
+      - "--web.console.templates=/usr/share/prometheus/consoles"
+      - "--web.enable-lifecycle"
+
+    restart: unless-stopped
+
+
+  # ---------------------------------------------------------------------------
+  # GRAFANA — Visualization dashboard with auto-loaded Carbon-Aware dashboard
+  # ---------------------------------------------------------------------------
+  grafana:
+    image: grafana/grafana:10.2.0
+    container_name: carbon-aware-grafana
+
+    environment:
+      - GF_SECURITY_ADMIN_USER=${GRAFANA_ADMIN_USER:-admin}
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:-admin}
+      - GF_USERS_ALLOW_SIGN_UP=false
+      - GF_SERVER_ROOT_URL=http://localhost:3000
+      # Auto-provision datasources and dashboards
+      - GF_PATHS_PROVISIONING=/etc/grafana/provisioning
+
+    volumes:
+      - grafana-data:/var/lib/grafana
+      # Prometheus datasource provisioning
+      - ./monitoring/grafana/datasources:/etc/grafana/provisioning/datasources:ro
+      # Dashboard provisioning config
+      - ../grafana/provisioning/dashboards/carbon-aware.yaml:/etc/grafana/provisioning/dashboards/carbon-aware.yaml:ro
+      # Dashboard JSON files (auto-loaded by provisioning)
+      - ../grafana/dashboards:/var/lib/grafana/dashboards:ro
+
+    ports:
+      - "3000:3000"
+
+    networks:
+      - monitoring-net
+
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 512M
+
+    depends_on:
+      - prometheus
+
+    restart: unless-stopped
+
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000/api/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+
+  # ---------------------------------------------------------------------------
+  # WATCHTOWER — Automatic image updates (optional)
+  # ---------------------------------------------------------------------------
+  watchtower:
+    image: containrrr/watchtower:latest
+    container_name: carbon-aware-watchtower
+
+    command:
+      - "--label-enable"
+      - "--interval"
+      - "3600"
+      - "--cleanup"
+
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+
+    networks:
+      - carbon-aware-net
+
+    labels:
+      - "com.centurylinklabs.watchtower.enable=true"
+
+    profiles:
+      - auto-update
