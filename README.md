@@ -1,16 +1,16 @@
-### Carbon-Aware-Deep-Reinforcement-Learning-Platform
+## Carbon-Aware-Deep-Reinforcement-Learning-Platform
 
-#### 1. What exactly is the software product we have created?
+### 1. What exactly is the software product we have created?
 We have created a production-ready, Kubernetes-native, carbon-aware workload scheduling platform. It operates as a custom Kubernetes controller that intercepts Pod scheduling requests and autonomously binds them to geo-distributed nodes. Its decision-making engine is powered by Deep Reinforcement Learning (specifically, a Recurrent PPO agent with LSTM memory), and it is governed by a rigorous, multi-layered risk management framework.
 
-#### 2. What is the platform's primary goal?
+### 2. What is the platform's primary goal?
 To minimize the Scope 2 carbon emissions of distributed computing workloads by intelligently shifting compute in time (temporal shifting) and space (spatial shifting) to align with periods and locations of low grid carbon intensity, without violating Service Level Agreements (SLAs) or destabilizing the infrastructure.
 
 Algorithmically (The AI Core): The decision-making engine we built is a Single-Agent Deep Reinforcement Learning system (Recurrent PPO with LSTM). It relies on a single, centralized neural network observing the environment and outputting actions. It does not use decentralized, self-organizing swarm algorithms like Particle Swarm Optimization (PSO), Ant Colony Optimization (ACO), or Multi-Agent Reinforcement Learning (MARL).
 
 Conceptually (The Workload): 100% Swarm Orchestration. The word «Swarm» in the project refers to the workload being managed, not the algorithm managing it. We are orchestrating a «swarm» of Kubernetes Pods (containers) distributed across a geo-distributed cluster. Deep RL with LSTM memory is vastly superior for sequential, time-series decision-making.)
 
-#### 3. What key tasks does it address?
+### 3. What key tasks does it address?
 
 Data Ingestion & Alignment: Fetching, caching, and synchronizing real-time and historical grid emissions data (WattTime MOER) across multiple regions.
 
@@ -22,7 +22,7 @@ Operational Safeguarding: Enforcing strict guardrails (capacity limits, SLA prot
 
 Auditability & Observability: Providing full transparency into every decision via shadow mode, structured JSONL logging, Prometheus metrics, and Grafana dashboards.
 
-#### 4. What are its main functions?
+### 4. What are its main functions?
 
 Automated Data Pipeline: Daily, incremental updates of regional carbon intensity data into a local Parquet cache.
 
@@ -38,7 +38,7 @@ Interpretability Analysis: A suite of tools (t-SNE clustering, occlusion attribu
 
 Risk management isn’t a bolt-on feature or an afterthought in this platform. It is a first-class, deeply integrated architectural pillar that operates across three distinct layers: Training (intrinsic), Inference (extrinsic), and Operations (process). Unlike 95% of academic Reinforcement Learning papers that assume a perfect, safe environment, this platform is explicitly designed for the messy, unpredictable reality of production infrastructure.
 
-#### 5. In which areas of industry can this software be used?
+### 5. In which areas of industry can this software be used?
 
 Cloud Computing & Hyperscalers: Optimizing regional load balancing for maximum sustainability.
 
@@ -50,9 +50,9 @@ Large Enterprise IT: Organizations with multi-region data centers facing strict 
 
 Blockchain/Web3: Sustainable scheduling of validation nodes or batched transaction processing.
 
-#### 6. For which tasks is it best suited, and for which is it NOT recommended?
+### 6. For which tasks is it best suited, and for which is it NOT recommended?
 
-6.1. Best Suited For:
+#### 6.1. Best Suited For:
 
 Batch Processing & ETL Jobs: Data pipelines, nightly builds, and report generation that have flexible start windows.
 
@@ -60,7 +60,7 @@ Machine Learning Workloads: Distributed training jobs or offline inference batch
 
 Geo-Replicated Stateless Services: Microservices that can be seamlessly spun up in a different region without breaking user experience.
 
-6.2. Not Recommended For:
+#### 6.2. Not Recommended For:
 
 Ultra-Low-Latency Interactive Applications: High-frequency trading, real-time gaming, or critical user-facing APIs where even a 10ms geographic routing penalty is unacceptable.
 
@@ -68,7 +68,7 @@ Strictly Stateful, Monolithic Databases: Systems that cannot be migrated or repl
 
 Single-Region Deployments: If an organization only has servers in one geographic location, spatial optimization is impossible. (Temporal optimization in a single region is better handled by simple, rule-based cron jobs, not complex RL).
 
-#### 7. What are the limitations regarding its use?
+### 7. What are the limitations regarding its use?
 
 External Data Dependency: The system’s efficacy is capped by the accuracy and uptime of the WattTime API. Prolonged API outages will trigger the circuit breaker, reverting the system to a conservative, suboptimal local scheduling mode.
 
@@ -77,7 +77,7 @@ Training Overhead: The model requires significant historical data and compute to
 
 Kubernetes Specificity: The execution layer is tightly coupled to the Kubernetes API. Adapting it to other orchestrators (like Slurm for HPC or Nomad) would require significant refactoring.
 
-#### 8. What are the most promising avenues for its future development?
+### 8. What are the most promising avenues for its future development?
 
 Explicit Forecast Integration: Feeding WattTime’s 24-48 hour forecast directly into the LSTM observation space, transitioning the agent from reactive to truly predictive.
 
@@ -87,7 +87,7 @@ Federated Learning: Enabling multiple organizations to collaboratively train a g
 
 Hardware-Aware Scheduling: Incorporating node-specific power draw profiles (e.g., CPU vs. GPU vs. TPU) to optimize for «performance-per-watt» rather than just «carbon-per-watt».
 
-#### 9. What AI software products are utilized within the platform?
+### 9. What AI software products are utilized within the platform?
 
 PyTorch: The core deep learning framework for model definition and inference.
 
@@ -99,7 +99,7 @@ Gymnasium: The standard OpenAI API used to define the reinforcement learning env
 
 Scikit-Learn: Used exclusively in the interpretability module for t-SNE, PCA, and Ridge regression (linear probing).
 
-#### 10. How and to what extent are encryption and cryptography used within this platform?
+### 10. How and to what extent are encryption and cryptography used within this platform?
 
 The Carbon-Aware DRL Platform is not a «cryptography-first» system (like a blockchain or a secure messaging app). Instead, it relies on standard enterprise transport security for communication, and uses cryptographic hashing specifically for AI model integrity and provenance.
 
@@ -107,9 +107,9 @@ This platform utilizes standard enterprise TLS/mTLS for all transport security a
 
 This proves we understand exactly where our code's responsibility ends and where the infrastructure's responsibility begins-a hallmark of a senior, production-grade architecture.
 
-#### 11. Do any counterparts to the platform we developed exist today?
+### 11. Do any counterparts to the platform we developed exist today?
 
-11.1. The Competitive Landscape: Who Exists and Where Are They Used?
+#### 11.1. The Competitive Landscape: Who Exists and Where Are They Used?
 
 Google Carbon-Intelligent Compute: Shifts flexible workloads across regions and times. (Status: Highly effective, but strictly proprietary and internal to Google).
 
@@ -119,7 +119,7 @@ Open-Source «Green» Schedulers (e.g., Kube-green): (Status: Mostly focus on sc
 
 Commercial FinOps/APM Tools (e.g., Vantage, CloudHealth): (Status: Provide carbon reporting and manual recommendations, but do not autonomously execute scheduling decisions).
 
-11.2. What Are Our Competitive Advantages?
+#### 11.2. What Are Our Competitive Advantages?
 
 True Autonomy: Unlike recommendation engines, our platform executes decisions safely via the K8s API.
 
@@ -129,7 +129,7 @@ Production-Grade Risk Management: The dynamic circuit breaker and shadow mode ar
 
 Built-in Interpretability: The dedicated toolkit bridges the «black box» trust gap that prevents most AI schedulers from passing enterprise security and SRE reviews.
 
-#### 12. Economic and Financial Impact (The ROI)
+### 12. Economic and Financial Impact (The ROI)
 
 Carbon Tax/Credit Avoidance: As carbon pricing mechanisms (e.g., EU ETS) expand, a 16.6% reduction in a 100MW data center saves ~1,200 tonnes of CO₂e annually. At $50/tonne, that is $60,000/year in direct savings, plus avoided Scope 2 reporting penalties.
 
@@ -139,7 +139,7 @@ Compute Cost Arbitrage: In many regions, low-carbon periods (midday solar, overn
 
 Payback Period: Given the software is custom-built/open-source, the primary costs are engineering time and minimal inference compute. The ROI is typically realized in < 12 months for medium-to-large deployments.
 
-#### 13. Honest Limitations and Reality Check
+### 13. Honest Limitations and Reality Check
 
 It is not a silver bullet. It optimizes when and where compute happens, but it does not reduce the total amount of compute. If a company's AI training workload doubles, total emissions will still rise, even with perfect scheduling.
 
@@ -149,7 +149,7 @@ The «Flexible Workload» Reality: Many enterprises do not actually have geo-dis
 
 Model Drift is Inevitable: Grid dynamics change (e.g., a new coal plant opens, or a massive solar farm comes online). The model must be retrained periodically, or its performance will silently degrade.
 
-#### 14. Project demonstration
+### 14. Project demonstration
 
 This project is attached a complete, self-contained demonstration Python script (demo_carbon_aware_drl.py). It requires no Kubernetes cluster and no API keys. It generates synthetic data, trains the agent live, and visualizes the carbon savings in real-time.
 
@@ -159,17 +159,17 @@ How to Run It:
 
 a) Install Dependencies:
 Open your terminal and run:
-'''
+```
    pip install numpy torch matplotlib
-'''
+```
 
 b) Execute the Script:
-'''
+```
    python demo_carbon_aware_drl.py
-'''
+```
 
-15. Quick Start
-'''
+### 15. Quick Start
+```
 bash
 # 1. Clone the repository
 git clone https://github.com/carbon-aware-drl-platform
@@ -200,7 +200,7 @@ docker-compose up -d
 # 8. Access dashboards
 open http://localhost:3000  # Grafana (admin/admin)
 open http://localhost:9090  # Prometheus
-'''
+```
 
 For deeper technical details, refer to the companion documents in the docs/ directory:
 
@@ -212,7 +212,7 @@ For deeper technical details, refer to the companion documents in the docs/ dire
 
 - Technical Whitepaper: Carbon-Aware Deep Reinforcement Learning Platform (docs/instructions/).
 
-#### 16. Final Verdict and Thoughts for Reflection
+### 16. Final Verdict and Thoughts for Reflection
 
 We have successfully architected and documented a system that bridges the notorious gap between academic Reinforcement Learning research and enterprise-grade software engineering. This is not just a «cool AI demo» or a Jupyter notebook experiment. It is a robust, observable, and safe tool that solves a real, measurable business and environmental problem.
 
