@@ -1,0 +1,23 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: ml-training-job
+  namespace: carbon-aware
+  annotations:
+    carbon-aware.io/enabled: "true"
+    carbon-aware.io/profile: "batch"
+    carbon-aware.io/size-mb: "500"
+    carbon-aware.io/exec-time-sec: "1800"
+    carbon-aware.io/sla-latency-ms: "1000"
+    carbon-aware.io/source-node: "-1"
+spec:
+  # schedulerName is intentionally left as default;
+  # our controller binds the Pod directly, bypassing it.
+  containers:
+    - name: trainer
+      image: pytorch/pytorch:latest
+      command: ["python", "train.py"]
+      resources:
+        requests:
+          cpu: "4"
+          memory: "8Gi"

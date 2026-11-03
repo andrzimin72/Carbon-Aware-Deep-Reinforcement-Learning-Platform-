@@ -1,0 +1,104 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Shadow Mode Decision Record",
+  "description": "A single decision from the shadow-mode inference runner",
+  "type": "object",
+  "required": ["timestamp", "request_id"],
+  "properties": {
+    "timestamp": {
+      "type": "string",
+      "format": "date-time",
+      "description": "ISO 8601 UTC timestamp of the decision"
+    },
+    "request_id": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}$",
+      "description": "8-character hex request ID for correlation"
+    },
+    "source": {
+      "type": "string",
+      "const": "shadow_mode_NO_EXECUTION",
+      "description": "Always indicates this is a non-executing shadow decision"
+    },
+    "signal": {
+      "type": "string",
+      "enum": ["MOER", "CO2_AVERAGE"],
+      "description": "WattTime signal type used"
+    },
+    "ci_g_per_kwh": {
+      "type": "array",
+      "items": {"type": "number", "minimum": 0},
+      "description": "Carbon intensity per region in gCO2e/kWh"
+    },
+    "policy_action": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Node index proposed by the policy"
+    },
+    "policy_action_region": {
+      "type": "string",
+      "description": "Region name corresponding to policy_action"
+    },
+    "executed_action": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Node index after safety gate override"
+    },
+    "executed_action_region": {
+      "type": "string",
+      "description": "Region name corresponding to executed_action"
+    },
+    "reason": {
+      "type": "string",
+      "enum": [
+        "accepted",
+        "stale_or_incomplete_grid_data",
+        "latency_sensitive_stays_local",
+        "capacity_guard"
+      ],
+      "description": "Why the safety gate accepted or overrode the policy"
+    },
+    "confidence": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1,
+      "description": "Policy's confidence in the chosen action"
+    },
+    "critic_value": {
+      "type": "number",
+      "description": "Critic's estimate of state value"
+    },
+    "task": {
+      "type": "object",
+      "required": ["profile", "size_mb", "exec_time_sec", "sla_latency_ms", "source_node"],
+      "properties": {
+        "profile": {"type": "string", "enum": ["interactive", "batch", "stateful"]},
+        "size_mb": {"type": "number", "minimum": 0},
+        "exec_time_sec": {"type": "number", "minimum": 0},
+        "sla_latency_ms": {"type": "number", "minimum": 0},
+        "source_node": {"type": "integer", "minimum": -1}
+      }
+    },
+    "feed_healthy": {
+      "type": "boolean",
+      "description": "Whether the grid feed was healthy at decision time"
+    },
+    "error": {
+      "type": "string",
+      "description": "Error message if the decision failed"
+    },
+    "skipped": {
+      "oneOf": [
+        {"type": "boolean"},
+        {"type": "string", "enum": ["feed_not_healthy"]}
+      ],
+      "description": "Reason the decision was skipped"
+    }
+  },
+  "allOf": [
+    {
+      "if": {"not": {"required": ["error", "skipped"]}},
+      "then": {"required": ["source", "signal", "ci_g_per_kwh", "policy_action", "executed_action", "reason", "confidence", "task"]}
+    }
+  ]
+}

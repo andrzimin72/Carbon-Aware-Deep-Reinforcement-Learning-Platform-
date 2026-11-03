@@ -1,0 +1,40 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: carbon-aware-scheduler
+  namespace: carbon-aware
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: carbon-aware-scheduler
+rules:
+  # Watch and list Pods
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list", "watch"]
+  # Bind Pods to nodes (the critical permission)
+  - apiGroups: [""]
+    resources: ["pods/binding"]
+    verbs: ["create"]
+  # Read Nodes for utilization metadata
+  - apiGroups: [""]
+    resources: ["nodes"]
+    verbs: ["get", "list", "watch"]
+  # Read Events for audit logging
+  - apiGroups: [""]
+    resources: ["events"]
+    verbs: ["create", "patch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: carbon-aware-scheduler
+subjects:
+  - kind: ServiceAccount
+    name: carbon-aware-scheduler
+    namespace: carbon-aware
+roleRef:
+  kind: ClusterRole
+  name: carbon-aware-scheduler
+  apiGroup: rbac.authorization.k8s.io

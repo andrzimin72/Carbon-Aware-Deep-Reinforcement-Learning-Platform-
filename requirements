@@ -1,0 +1,103 @@
+# =============================================================================
+# CARBON-AWARE DEEP REINFORCEMENT LEARNING PLATFORM — PRODUCTION DEPENDENCIES
+# =============================================================================
+#
+# Python 3.10+ required (for match/case, type union syntax, tomllib)
+#
+# Install:
+#   pip install -r requirements.txt
+#
+# For development (includes testing, linting, notebooks):
+#   pip install -r requirements-dev.txt
+#
+# For CUDA support (replace 'cpu' with your CUDA version):
+#   pip install torch --index-url https://download.pytorch.org/whl/cu121
+#
+# =============================================================================
+
+
+# -----------------------------------------------------------------------------
+# CORE — Numerical & ML
+# -----------------------------------------------------------------------------
+# numpy pinned <2.0 for PyTorch compatibility
+numpy>=1.24,<2.0
+torch>=2.1,<2.4
+gymnasium>=0.29,<1.0
+
+
+# -----------------------------------------------------------------------------
+# DATA — HTTP, Storage, Processing
+# -----------------------------------------------------------------------------
+requests>=2.31,<3.0
+urllib3>=2.0,<3.0
+pandas>=2.1,<3.0
+pyarrow>=14.0,<16.0
+tqdm>=4.66,<5.0
+
+
+# -----------------------------------------------------------------------------
+# STATISTICS & VISUALIZATION
+# -----------------------------------------------------------------------------
+scipy>=1.11,<2.0
+scikit-learn>=1.3,<2.0
+matplotlib>=3.8,<4.0
+seaborn>=0.13,<1.0
+
+
+# -----------------------------------------------------------------------------
+# KUBERNETES DEPLOYMENT
+# -----------------------------------------------------------------------------
+# Version tracks K8s minor versions. Pin to match your cluster.
+kubernetes>=28.1,<30.0
+
+
+# -----------------------------------------------------------------------------
+# UTILITIES
+# -----------------------------------------------------------------------------
+python-dotenv>=1.0,<2.0
+pydantic>=2.5,<3.0
+PyYAML>=6.0,<7.0
+
+
+# =============================================================================
+# VERSION PINNING NOTES
+# =============================================================================
+#
+# - numpy < 2.0: PyTorch 2.x has known incompatibilities with numpy 2.0+.
+#   Update together when upgrading torch.
+#
+# - torch < 2.4: Pinned to avoid breaking changes in optimizer API.
+#   For CUDA 12.1 support, install separately:
+#     pip install torch --index-url https://download.pytorch.org/whl/cu121
+#
+# - kubernetes: Version tracks K8s minor versions.
+#   Examples:
+#     K8s 1.28 → kubernetes>=28.1,<29
+#     K8s 1.29 → kubernetes>=29.0,<30
+#
+# - All upper bounds are soft — they prevent accidental major-version jumps
+#   that could break the project. Loosen as needed after testing.
+#
+# =============================================================================
+
+
+# =============================================================================
+# OPTIONAL DEPENDENCIES (install as needed)
+# =============================================================================
+#
+# For Jupyter notebooks (exploratory analysis):
+#   pip install jupyterlab ipywidgets
+#
+# For GPU training (CUDA 12.1):
+#   pip install torch --index-url https://download.pytorch.org/whl/cu121
+#
+# For WandB experiment tracking:
+#   pip install wandb
+#
+# For Slack notifications on update failures:
+#   pip install slack-sdk
+#
+# For UMAP embeddings in interpretability:
+#   pip install umap-learn
+#
+# =============================================================================

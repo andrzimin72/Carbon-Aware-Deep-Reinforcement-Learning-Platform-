@@ -1,0 +1,429 @@
+# =============================================================================
+# CARBON-AWARE DEEP REINFORCEMENT LEARNING PLATFORM — PROJECT STRUCTURE
+# =============================================================================
+#
+# A production-grade AI/ML system for carbon-aware workload scheduling in
+# geo-distributed data centers. Uses recurrent PPO with LSTM memory to
+# schedule workloads based on real-time grid carbon intensity (WattTime MOER).
+#
+# Author: [Your Name]
+# License: [Your License]
+# Python: 3.10+
+#
+# =============================================================================
+
+carbon-aware-deep-reinforcement-learning-platform/
+│
+├── README.md                          # Project overview, quickstart, architecture
+├── LICENSE                            # License file
+├── .gitignore                         # Git ignore rules (see above)
+├── .env.example                       # Environment variables template
+├── .dockerignore                      # Docker build context exclusions
+│
+├── requirements.txt                   # Production dependencies
+├── requirements-dev.txt               # Development/testing dependencies
+├── pyproject.toml                     # Project metadata (optional, for packaging)
+├── project_structure.txt              # This file
+│
+│
+├── ═══════════════════════════════════════════════════════════════════════════
+│   SOURCE CODE (src/)
+├── ═══════════════════════════════════════════════════════════════════════════
+│
+├── src/
+│   ├── __init__.py
+│   │
+│   ├── ─── WattTime Integration ────────────────────────────────────────────
+│   │
+│   ├── watttime/
+│   │   ├── __init__.py                # Package exports
+│   │   ├── client.py                  # Production-grade WattTime API client
+│   │   │                              #   - v2/v3 support, pagination, retries
+│   │   │                              #   - Thread-safe token caching
+│   │   │                              #   - Custom exception hierarchy
+│   │   ├── pipeline.py                # Download/cache/replay pipeline
+│   │   │                              #   - Incremental downloads
+│   │   │                              #   - Parquet-based local cache
+│   │   │                              #   - CLI interface
+│   │   ├── grid_feed.py               # Live observation feed
+│   │   │                              #   - Rolling 5-hour window
+│   │   │                              #   - Staleness detection
+│   │   │                              #   - Unit conversion (MWh → kWh)
+│   │   ├── forecast_feed.py           # Forecast-aware feed extension
+│   │   │                              #   - Real WattTime /forecast endpoint
+│   │   │                              #   - Synthetic fallback for testing
+│   │   └── daily_update.py            # Automated daily update script
+│   │                                  #   - File locking, structured logging
+│   │                                  #   - Webhook notifications on failure
+│   │
+│   ├── ─── Environment Layer ───────────────────────────────────────────────
+│   │
+│   ├── environment/
+│   │   ├── __init__.py                # Package exports
+│   │   ├── replay_buffer.py           # Historical replay buffer (base)
+│   │   │                              #   - Synthetic data generation
+│   │   │                              #   - Aligned multi-region series
+│   │   ├── replay_buffer_real.py      # Real-data replay buffer
+│   │   │                              #   - Loads from WattTime pipeline cache
+│   │   │                              #   - Auto-downloads missing ranges
+│   │   ├── replay_env.py              # Simplified replay environment
+│   │   │                              #   - Execution + migration + SLA
+│   │   └── advanced_replay_env.py     # Gym env with embodied carbon
+│   │                                  #   - Execution + idle/embodied carbon
+│   │                                  #   - Disentangled metrics for Pareto
+│   │                                  #   - Profile-aware task generation
+│   │
+│   ├── ─── AI/ML Agent ─────────────────────────────────────────────────────
+│   │
+│   ├── agent/
+│   │   ├── __init__.py                # Package exports
+│   │   └── recurrent_ppo.py           # Recurrent Actor-Critic PPO agent
+│   │                                  #   - LSTM for temporal memory
+│   │                                  #   - Separate Actor + Critic heads
+│   │                                  #   - PPO clipping + entropy bonus
+│   │                                  #   - build_policy() + load_policy()
+│   │
+│   ├── ─── Training & Evaluation ───────────────────────────────────────────
+│   │
+│   ├── training/
+│   │   ├── __init__.py                # Package exports
+│   │   ├── replay_trainer.py          # Training loop with seeded splits
+│   │   │                              #   - PPOAgent with GAE
+│   │   │                              #   - train_agent() function
+│   │   │                              #   - Checkpoint provenance (JSON sidecar)
+│   │   ├── statistical_ablation.py    # Multi-seed ablation (window=1 vs 5)
+│   │   │                              #   - Paired t-tests, 95% CIs
+│   │   │                              #   - Pareto front visualization
+│   │   ├── three_way_ablation.py      # Reactive vs Memoryless vs Forecast
+│   │   │                              #   - Publication-ready figures
+│   │   ├── forecast_baseline.py       # Forecast-aware rule-based baseline
+│   │   │                              #   - Confidence discounting
+│   │   └── real_forecast_baseline.py  # Real-data forecast baseline
+│   │                                  #   - Handles forecast staleness
+│   │
+│   ├── ─── Interpretability ────────────────────────────────────────────────
+│   │
+│   ├── interpretability/
+│   │   ├── __init__.py                # Package exports
+│   │   ├── interpreter.py             # LSTM interpretability toolkit
+│   │   │                              #   - Hidden state clustering (t-SNE)
+│   │   │                              #   - Temporal occlusion attribution
+│   │   │                              #   - Gradient-based saliency maps
+│   │   │                              #   - Multi-horizon linear probe
+│   │   │                              #   - Policy calibration analysis
+│   │   └── run_interpretability.py    # Interpretability runner
+│   │                                  #   - Single or multi-checkpoint mode
+│   │                                  #   - Summary compilation
+│   │                                  #   - JSON report export
+│   │
+│   ├── ─── Deployment ──────────────────────────────────────────────────────
+│   │
+│   ├── deployment/
+│   │   ├── __init__.py                # Package exports (lazy K8s import)
+│   │   ├── infer_shadow.py            # Shadow-mode inference runner
+│   │   │                              #   - Live WattTime feed
+│   │   │                              #   - Safety gate
+│   │   │                              #   - JSONL decision logging
+│   │   │                              #   - Optional health/metrics endpoints
+│   │   └── k8s_controller.py          # Kubernetes Pod controller
+│   │                                  #   - Watches annotated Pending Pods
+│   │                                  #   - Runs PPO agent, binds to nodes
+│   │                                  #   - Audit annotations on every decision
+│   │                                  #   - Request-ID correlation
+│   │
+│   └── ─── Utilities ───────────────────────────────────────────────────────
+│
+│   └── utils/
+│       ├── __init__.py
+│       ├── metrics.py                 # Metrics exposed by the deployment scripts
+│       └── logging_config.py          # Centralized logging configuration
+│                                      #   - Per-module level overrides
+│                                      #   - File rotation
+│                                      #   - JSON structured logging
+│                                      #   - Colorized console output
+│                                      #   - Request-ID filter
+│
+│
+├── ═══════════════════════════════════════════════════════════════════════════
+│   CONFIGURATION (config/)
+├── ═══════════════════════════════════════════════════════════════════════════
+│
+├── config/
+│   ├── regions.yaml                   # WattTime region configuration
+│   │                                  #   - Region codes, K8s node mappings
+│   │                                  #   - Grid profiles, latency matrix
+│   │                                  #   - Fallback rules
+│   └── scheduler.yaml                 # Scheduler parameters & thresholds
+│                                      #   - PPO hyperparameters
+│                                      #   - Safety gate rules
+│                                      #   - Environment settings
+│                                      #   - Training/inference config
+│
+│
+├── ═══════════════════════════════════════════════════════════════════════════
+│   DEPLOYMENT ARTIFACTS (deploy/)
+├── ═══════════════════════════════════════════════════════════════════════════
+│
+├── deploy/
+│   ├── kubernetes/
+│   │   ├── rbac.yaml                  # ServiceAccount + ClusterRole + Binding
+│   │   ├── deployment.yaml            # Controller Deployment manifest
+│   │   ├── service.yaml               # Metrics + health endpoints
+│   │   ├── configmap.yaml             # Non-secret configuration
+│   │   ├── cronjob.yaml               # Daily update CronJob
+│   │   └── kustomization.yaml         # Kustomize overlay
+│   │
+│   ├── systemd/
+│   │   ├── watttime-update.service    # Systemd service for daily updates
+│   │   └── watttime-update.timer      # Systemd timer (daily at 2 AM UTC)
+│   │
+│   ├── docker/
+│   │   ├── Dockerfile                 # Main controller image (multi-stage)
+│   │   ├── Dockerfile.update          # Updater image (lightweight, ~200MB)
+│   │   ├── entrypoint.sh              # Shared entrypoint with pre-flight checks
+│   │   ├── docker-compose.yml         # Local dev stack
+│   │   │                              #   - Controller + updater + Prometheus + Grafana
+│   │   └── monitoring/
+│   │       └── prometheus.yml         # Prometheus scrape configuration
+│   │
+│   └── logrotate/
+│       └── carbon-aware               # Logrotate configuration
+│
+│
+├── ═══════════════════════════════════════════════════════════════════════════
+│   TESTS (tests/)
+├── ═══════════════════════════════════════════════════════════════════════════
+│
+├── tests/
+│   ├── __init__.py                    # Test package marker
+│   ├── conftest.py                    # Shared pytest fixtures
+│   │                                  #   - Mock WattTime API responses
+│   │                                  #   - Temporary directories
+│   │                                  #   - Sample replay buffers
+│   │                                  #   - Mock Kubernetes objects
+│   ├── test_watttime_client.py        # Client unit tests (15 tests)
+│   │                                  #   - Authentication, endpoints, retries
+│   ├── test_pipeline.py               # Pipeline unit tests (10 tests)
+│   │                                  #   - Download, cache, alignment
+│   ├── test_environment.py            # Gym environment tests (15 tests)
+│   │                                  #   - Gym interface, rewards, state
+│   └── test_agent.py                  # PPO agent tests (15 tests)
+│                                      #   - Architecture, forward pass, gradients
+│
+│
+├── ═══════════════════════════════════════════════════════════════════════════
+│   NOTEBOOKS (notebooks/)
+├── ═══════════════════════════════════════════════════════════════════════════
+│
+├── notebooks/
+│   ├── 01_data_exploration.ipynb.py   # Explore WattTime distributions
+│   │                                  #   - Diurnal patterns, regional comparison
+│   │                                  #   - Clean/dirty analysis, volatility
+│   ├── 02_training_curves.ipynb.py    # Visualize learning curves
+│   │                                  #   - Multi-seed comparison, confidence intervals
+│   │                                  #   - Convergence speed, checkpoint selection
+│   └── 03_interpretability.ipynb.py   # Interactive interpretability
+│                                      #   - t-SNE explorer, temporal attribution
+│                                      #   - Linear probe, multi-checkpoint comparison
+│
+│
+├── ═══════════════════════════════════════════════════════════════════════════
+│   SCRIPTS (scripts/)
+├── ═══════════════════════════════════════════════════════════════════════════
+│
+├── scripts/
+│   ├── download_real_data.sh          # One-shot data download
+│   │                                  #   - Validates credentials
+│   │                                  #   - Handles errors, verifies download
+│   ├── run_full_ablation.sh           # End-to-end ablation pipeline
+│   │                                  #   - Data → train → ablate → interpret → figures
+│   │                                  #   - Resumable, quick mode, skip options
+│   ├── generate_paper_figures.py      # Reproduce all paper figures
+│   │                                  #   - 7 publication-quality figures
+│   │                                  #   - LaTeX table, JSON manifest
+│   ├── generate_mock_cache.py         # Generate mock WattTime cache
+│   │                                  #   - Realistic synthetic data for testing
+│   └── generate_checkpoints.py        # Generate smoke-test checkpoints
+│                                      #   - Valid but untrained weights
+│                                      #   - JSON provenance sidecars
+│
+│
+├── ═══════════════════════════════════════════════════════════════════════════
+│   DOCUMENTATION (docs/)
+├── ═══════════════════════════════════════════════════════════════════════════
+│
+├── docs/
+│   ├── /architecture/                 # System architecture deep-dive
+│   ├── /instruction/                  # Research methodology & Deployment guide
+│   └── /presentation/                 # Presentation & Strategic roadmap
+│
+│
+├── ═══════════════════════════════════════════════════════════════════════════
+│   RUNTIME DATA (gitignored, created at runtime)
+├── ═══════════════════════════════════════════════════════════════════════════
+│
+├── watttime_cache/                    # [gitignored] Local Parquet cache
+│   ├── metadata.json                  #   Cache metadata (regions, ranges)
+│   ├── CAISO_NORTH.parquet            #   Per-region hourly data
+│   ├── MISO.parquet
+│   └── ERCOT.parquet
+│
+├── checkpoints/                       # [gitignored] Trained model checkpoints
+│   ├── ppo_window1.pt                 #   Memoryless ablation arm
+│   ├── ppo_window1.json               #   Provenance sidecar
+│   ├── ppo_window5.pt                 #   Reactive LSTM arm
+│   ├── ppo_window5.json
+│   ├── ppo_reactive_seed42.pt         #   Reactive arm, seed 42
+│   └── ppo_reactive_seed42.json
+│
+├── outputs/                           # [gitignored] Generated figures & reports
+│   ├── paper/                         #   Paper-ready figures
+│   │   ├── fig01_architecture.png
+│   │   ├── fig02_data_exploration.png
+│   │   ├── fig03_learning_curves.png
+│   │   ├── fig04_pareto_front.png
+│   │   ├── fig05_three_way_comparison.png
+│   │   ├── fig06_interpretability.png
+│   │   ├── fig07_combined_summary.png
+│   │   ├── results_table.tex          #   LaTeX table
+│   │   └── manifest.json              #   Generated files manifest
+│   ├── ablation/                      #   Statistical ablation results
+│   │   ├── raw_results.csv
+│   │   ├── pareto_ablation.png
+│   │   ├── carbon_boxplot.png
+│   │   ├── statistical_tests.json
+│   │   └── comparison_summary.json
+│   ├── three_way/                     #   Three-way comparison results
+│   │   ├── raw_results.csv
+│   │   ├── three_way_comparison.png
+│   │   ├── statistical_tests.json
+│   │   └── comparison_summary.json
+│   └── interpretability/              #   Interpretability results
+│       ├── window1/
+│       ├── window5/
+│       └── comparison/
+│
+├── logs/                              # [gitignored] Runtime logs
+│   ├── controller.log                 #   Controller logs (rotating)
+│   ├── shadow.log                     #   Shadow mode logs (rotating)
+│   ├── updater_YYYYMMDD.log           #   Daily updater logs (per day)
+│   ├── training/                      #   Training logs
+│   └── ablation/                      #   Ablation logs
+│
+├── shadow_decisions.jsonl             # [gitignored] Shadow-mode decision audit log
+│
+│
+└── ═══════════════════════════════════════════════════════════════════════════
+    SUMMARY
+└── ═══════════════════════════════════════════════════════════════════════════
+
+
+# =============================================================================
+# FILE COUNT SUMMARY
+# =============================================================================
+#
+#   Source code (src/):
+#     src/watttime/           5 Python files
+#     src/environment/        5 Python files
+#     src/agent/              2 Python files
+#     src/training/           6 Python files
+#     src/interpretability/   3 Python files
+#     src/deployment/         3 Python files
+#     src/utils/              2 Python files
+#     ─────────────────────────────────────────
+#     Total source:          26 Python files
+#
+#   Configuration:            2 YAML files
+#   Deployment manifests:    11 files (K8s + systemd + Docker + logrotate)
+#   Tests:                    6 Python files
+#   Notebooks:                3 Jupytext files
+#   Scripts:                  5 files (3 shell, 2 Python)
+#   Documentation:            16 files
+#   Project config:           5 files (.gitignore, .env.example, requirements*, structure)
+#   ─────────────────────────────────────────
+#   Total tracked files:     ~70 files
+#
+# =============================================================================
+
+
+# =============================================================================
+# ARCHITECTURAL LAYERS
+# =============================================================================
+#
+#   ┌─────────────────────────────────────────────────────────────────────┐
+#   │  DATA LAYER (src/watttime/)                                         │
+#   │  ├─ WattTimeClient (HTTP, auth, retries, pagination)                │
+#   │  ├─ WattTimeDataPipeline (offline: download, cache, replay)         │
+#   │  ├─ WattTimeGridFeed (online: rolling window, observation)          │
+#   │  └─ ForecastWattTimeGridFeed (forecast extension)                   │
+#   └─────────────────────────────────────────────────────────────────────┘
+#                                 │
+#                                 ▼
+#   ┌─────────────────────────────────────────────────────────────────────┐
+#   │  ENVIRONMENT LAYER (src/environment/)                               │
+#   │  ├─ HistoricalReplayBuffer (base)                                   │
+#   │  ├─ RealWattTimeReplayBuffer (real data)                            │
+#   │  ├─ ReplayEnv (simplified)                                          │
+#   │  └─ AdvancedReplayEnv (embodied carbon + Pareto metrics)            │
+#   └─────────────────────────────────────────────────────────────────────┘
+#                                 │
+#                                 ▼
+#   ┌─────────────────────────────────────────────────────────────────────┐
+#   │  AGENT LAYER (src/agent/)                                           │
+#   │  └─ RecurrentActorCriticPPO (LSTM + Actor + Critic)                 │
+#   └─────────────────────────────────────────────────────────────────────┘
+#                                 │
+#                                 ▼
+#   ┌─────────────────────────────────────────────────────────────────────┐
+#   │  TRAINING & EVALUATION (src/training/)                              │
+#   │  ├─ PPOAgent (GAE, clipped surrogate, entropy bonus)                │
+#   │  ├─ train_agent() (seeded splits, checkpointing)                    │
+#   │  ├─ run_statistical_ablation() (paired t-tests, Pareto)             │
+#   │  ├─ run_three_way_ablation() (reactive vs memoryless vs forecast)   │
+#   │  └─ ForecastAwareBaseline / RealForecastBaseline                    │
+#   └─────────────────────────────────────────────────────────────────────┘
+#                                 │
+#                                 ▼
+#   ┌─────────────────────────────────────────────────────────────────────┐
+#   │  INTERPRETABILITY (src/interpretability/)                           │
+#   │  ├─ LSTMInterpreter (t-SNE, occlusion, saliency, linear probe)      │
+#   │  └─ run_interpretability (single/multi-checkpoint, JSON report)     │
+#   └─────────────────────────────────────────────────────────────────────┘
+#                                 │
+#                                 ▼
+#   ┌─────────────────────────────────────────────────────────────────────┐
+#   │  DEPLOYMENT (src/deployment/)                                       │
+#   │  ├─ ShadowModeRunner (shadow mode, JSONL audit, metrics endpoint)   │
+#   │  └─ CarbonAwareController (K8s Pod binding, safety gate)            │
+#   └─────────────────────────────────────────────────────────────────────┘
+#
+# =============================================================================
+
+
+# =============================================================================
+# QUICK START
+# =============================================================================
+#
+#   1. Setup:
+#      cp .env.example .env
+#      nano .env  # Fill in WATTTIME_USERNAME, WATTTIME_PASSWORD
+#      python -m venv .venv && source .venv/bin/activate
+#      pip install -r requirements.txt
+#      pip install -r requirements-dev.txt
+#
+#   2. Download data:
+#      ./scripts/download_real_data.sh --lookback 90
+#
+#   3. Run full experiment:
+#      ./scripts/run_full_ablation.sh
+#
+#   4. Generate paper figures:
+#      python scripts/generate_paper_figures.py
+#
+#   5. Run tests:
+#      pytest tests/ -v --cov=src
+#
+#   6. Explore interactively:
+#      jupyter lab notebooks/
+#
+# =============================================================================

@@ -1,0 +1,25 @@
+# deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: carbon-aware-controller
+  namespace: carbon-aware
+spec:
+  replicas: 1   # MUST be 1 to avoid duplicate bindings
+  selector:
+    matchLabels: { app: carbon-aware-controller }
+  template:
+    metadata:
+      labels: { app: carbon-aware-controller }
+    spec:
+      serviceAccountName: carbon-aware-scheduler
+      containers:
+        - name: controller
+          image: your-registry/carbon-aware-controller:latest
+          env:
+            - name: WATTTIME_USERNAME
+              valueFrom: { secretKeyRef: { name: watttime-creds, key: username } }
+            - name: WATTTIME_PASSWORD
+              valueFrom: { secretKeyRef: { name: watttime-creds, key: password } }
+            - name: PROMETHEUS_URL
+              value: "http://prometheus-operated.monitoring:9090"

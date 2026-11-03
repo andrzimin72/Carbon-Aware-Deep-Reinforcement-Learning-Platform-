@@ -1,0 +1,103 @@
+# =============================================================================
+# CARBON-AWARE DEEP REINFORCEMENT LEARNING PLATFORM — DEVELOPMENT DEPENDENCIES
+# =============================================================================
+#
+# Install both:
+#   pip install -r requirements.txt
+#   pip install -r requirements-dev.txt
+#
+# =============================================================================
+
+-r requirements.txt
+
+
+# -----------------------------------------------------------------------------
+# TESTING
+# -----------------------------------------------------------------------------
+pytest>=7.4,<9.0
+pytest-cov>=4.1,<6.0
+pytest-mock>=3.12,<4.0
+responses>=0.24,<1.0          # Mock HTTP requests for WattTime client tests
+pytest-asyncio>=0.23,<1.0     # For async tests (if needed)
+hypothesis>=6.90,<7.0         # Property-based testing (optional)
+
+
+# -----------------------------------------------------------------------------
+# CODE QUALITY
+# -----------------------------------------------------------------------------
+ruff>=0.3,<1.0                # Fast linter + formatter (replaces flake8/black/isort)
+mypy>=1.8,<2.0                # Static type checking
+pre-commit>=3.6,<4.0          # Git hook manager
+types-requests>=2.31          # Type stubs for requests
+types-PyYAML>=6.0             # Type stubs for PyYAML
+
+
+# -----------------------------------------------------------------------------
+# NOTEBOOKS & EXPLORATION
+# -----------------------------------------------------------------------------
+jupyterlab>=4.0,<5.0
+ipywidgets>=8.1,<9.0
+nbformat>=5.9,<6.0
+jupytext>=1.16,<2.0           # Convert between .ipynb and .py formats
+
+
+# -----------------------------------------------------------------------------
+# EXPERIMENT TRACKING (optional)
+# -----------------------------------------------------------------------------
+wandb>=0.16,<1.0              # Weights & Biases
+tensorboard>=2.15,<3.0        # TensorBoard
+
+
+# -----------------------------------------------------------------------------
+# DOCUMENTATION
+# -----------------------------------------------------------------------------
+mkdocs>=1.5,<2.0
+mkdocs-material>=9.5,<10.0
+mkdocstrings[python]>=0.24,<1.0
+
+
+# -----------------------------------------------------------------------------
+# DEBUGGING & PROFILING
+# -----------------------------------------------------------------------------
+ipython>=8.18,<9.0
+ipdb>=0.13,<1.0               # Interactive debugger
+memory-profiler>=0.61,<1.0    # Memory profiling
+py-spy>=0.3,<1.0              # Sampling profiler
+
+
+# -----------------------------------------------------------------------------
+# SECURITY
+# -----------------------------------------------------------------------------
+safety>=2.3,<4.0              # Check dependencies for known vulnerabilities
+bandit>=1.7,<2.0              # Security linter for Python code
+pip-audit>=2.6,<3.0           # Audit installed packages
+
+
+# =============================================================================
+# DEVELOPMENT WORKFLOW
+# =============================================================================
+#
+# After installing dev dependencies:
+#
+# 1. Set up pre-commit hooks:
+#    pre-commit install
+#
+# 2. Run tests:
+#    pytest tests/ -v --cov=src --cov-report=html
+#
+# 3. Run linter:
+#    ruff check src/ tests/
+#    ruff format src/ tests/
+#
+# 4. Run type checker:
+#    mypy src/
+#
+# 5. Check for security issues:
+#    safety check
+#    bandit -r src/
+#
+# 6. Build docs:
+#    mkdocs build
+#    mkdocs serve
+#
+# =============================================================================
