@@ -1,0 +1,85 @@
+# =============================================================================
+# LOGROTATE CONFIGURATION FOR CARBON-AWARE PLATFORM
+# =============================================================================
+# Location: /etc/logrotate.dcarbon-aware
+#
+# Handles log rotation for:
+# - Daily updater logs (time-based: one file per day)
+# - Controller logs (size-based: rotating file)
+# - Shadow mode logs (size-based: rotating file)
+#
+# Install:
+#   sudo cp deploy/logrotate/carbon-aware /etc/logrotate.d/
+#   sudo chmod 644 /etc/logrotate.d/carbon-aware
+#   sudo logrotate -f /etc/logrotate.d/carbon-aware  # Test immediately
+# =============================================================================
+
+# Daily updater logs (time-based rotation)
+/var/log/carbon-aware/updater_*.log {
+    daily
+    rotate 30
+    compress
+    delaycompress
+    missingok
+    notifempty
+    create 0640 carbon-aware carbon-aware
+    sharedscripts
+    postrotate
+        # No need to signal the updater (it's a cron job, not a daemon)
+        true
+    endscript
+}
+
+# Controller logs (size-based rotation)
+/var/log/carbon-aware/controller.log {
+    size 50M
+    rotate 10
+    compress
+    delaycompress
+    missingok
+    notifempty
+    create 0640 carbon-aware carbon-aware
+    sharedscripts
+    postrotate
+        # Signal the controller to reopen log files
+        systemctl reload carbon-aware-controller 2>/dev/null || true
+    endscript
+}
+
+# Shadow mode logs (size-based rotation)
+/var/log/carbon-aware/shadow.log {
+    size 50M
+    rotate 10
+    compress
+    delaycompress
+    missingok
+    notifempty
+    create 0640 carbon-aware carbon-aware
+    sharedscripts
+    postrotate
+        # Signal shadow runner to reopen log files (if running as a service)
+        systemctl reload carbon-aware-shadow 2>/dev/null || true
+    endscript
+}
+
+# Training logs (manual cleanup, keep last 90 days)
+/var/log/carbon-aware/training/*.log {
+    weekly
+    rotate 13
+    compress
+    delaycompress
+    missingok
+    notifempty
+    create 0640 carbon-aware carbon-aware
+}
+
+# JSON structured logs (if enabled)
+/var/log/carbon-aware/*.jsonl {
+    size 100M
+    rotate 5
+    compress
+    delaycompress
+    missingok
+    notifempty
+    create 0640 carbon-aware carbon-aware
+}

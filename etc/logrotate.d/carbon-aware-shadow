@@ -1,0 +1,11 @@
+/var/log/carbon-aware/shadow_decisions.jsonl {
+    daily
+    rotate 30
+    compress
+    delaycompress
+    missingok
+    notifempty
+    create 0640 carbon-aware carbon-aware
+    copytruncate              # Don't interrupt the running process
+    maxsize 100M              # Rotate early if file gets too big
+}
