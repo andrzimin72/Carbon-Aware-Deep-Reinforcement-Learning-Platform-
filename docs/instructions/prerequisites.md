@@ -245,6 +245,7 @@ sudo apt-get install -y \
   htop \
   iotop \
   net-tools
+```
 
 ### 2.2 Python Environment
 Python Version:
@@ -252,6 +253,7 @@ Required: Python 3.10 or 3.11
 Recommended: Python 3.11 (best performance)
 Not supported: Python 3.9 or earlier (missing type union syntax)
 Virtual Environment:
+```
 # Create virtual environment
 python3.11 -m venv .venv
 
@@ -260,8 +262,10 @@ source .venv/bin/activate
 
 # Upgrade pip
 pip install --upgrade pip setuptools wheel
+```
 
 Installation:
+```
 # Production dependencies
 pip install -r requirements.txt
 
@@ -270,6 +274,7 @@ pip install -r requirements-dev.txt
 
 # GPU support (CUDA 12.1)
 pip install torch --index-url https://download.pytorch.org/whl/cu121
+```
 
 Dependency Conflicts:
 numpy must be < 2.0 (PyTorch compatibility)
@@ -289,6 +294,7 @@ Pod Security Policies (PSP) or Pod Security Admission (PSA) — recommended
 Network Policies — optional, for security
 
 Kubernetes Client Configuration:
+```
 # Verify kubectl is configured
 kubectl cluster-info
 
@@ -297,6 +303,7 @@ kubectl version --client
 
 # Verify namespace exists
 kubectl get namespace carbon-aware
+```
 
 RBAC Requirements:
 The controller requires a ServiceAccount with specific permissions (see deploy/kubernetes/rbac.yaml):
@@ -317,6 +324,7 @@ Required: Docker Compose v2.0+
 Installation: Included with Docker Desktop or install separately
 
 Image Registry:
+```
 # Build images
 docker build -f deploy/docker/Dockerfile -t carbon-aware-controller:latest .
 docker build -f deploy/docker/Dockerfile.update -t carbon-aware-updater:latest .
@@ -324,6 +332,8 @@ docker build -f deploy/docker/Dockerfile.update -t carbon-aware-updater:latest .
 # Push to registry
 docker tag carbon-aware-controller:latest your-registry.io/carbon-aware-controller:v1.0.0
 docker push your-registry.io/carbon-aware-controller:v1.0.0
+```
+
 Image Security:
 All images run as non-root user (UID 1000)
 Read-only root filesystem where possible
@@ -371,6 +381,7 @@ Custom: Internal grid telemetry (requires custom integration)
 ## 3. Installation Verification
 ### 3.1 Pre-Flight Checklist
 Run this script to verify all prerequisites are met:
+```
 #!/bin/bash
 # verify_prerequisites.sh
 
@@ -451,36 +462,39 @@ echo ""
 echo "=========================================="
 echo "✅ All prerequisites verified!"
 echo "=========================================="
+```
 
 ### 3.2 Quick Start Verification
+```
 #!/bin/bash
-1. Install Python dependencies
+# 1. Install Python dependencies
 pip install -r requirements.txt
 
-2. Run unit tests
+# 2. Run unit tests
 pytest tests/ -v
 
-3. Generate mock data (if WattTime credentials not available)
+# 3. Generate mock data (if WattTime credentials not available)
 python scripts/generate_mock_cache.py
 
-4. Train a test model (5 episodes, quick validation)
+# 4. Train a test model (5 episodes, quick validation)
 python -m src.training.replay_trainer \
   --window-size 5 \
   --seed 42 \
   --episodes 5 \
   --checkpoint-path /tmp/test.pt
 
-5. Run shadow mode (10 decisions)
+# 5. Run shadow mode (10 decisions)
 python -m src.deployment.infer_shadow \
   --checkpoint /tmp/test.pt \
   --regions CAISO_NORTH MISO ERCOT \
   --interval 1 \
   --max-decisions 10
 
-6. Verify metrics endpoint
+# 6. Verify metrics endpoint
 curl http://localhost:8000/metrics | grep carbon_aware
 
-7. Deploy to Kubernetes (dry run)
+# 7. Deploy to Kubernetes (dry run)
 kubectl apply -k deploy/kubernetes/ --dry-run=client
 
 echo "✅ All verification steps passed!"
+```
