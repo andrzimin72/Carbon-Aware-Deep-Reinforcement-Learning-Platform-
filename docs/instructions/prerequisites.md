@@ -315,11 +315,13 @@ configmaps: get, list, watch
 secrets: get (for WattTime credentials)
 
 ### 2.4 Container Runtime
-Docker Version:
+
+a) Docker Version:
 Required: Docker 20.10+
 Recommended: Docker 24.0+
 Alternative: containerd 1.6+ (Kubernetes native)
-Docker Compose:
+
+b) Docker Compose:
 Required: Docker Compose v2.0+
 Installation: Included with Docker Desktop or install separately
 
@@ -341,31 +343,37 @@ No unnecessary packages installed
 Regular vulnerability scanning with Trivy or Snyk
 
 ### 2.5 Monitoring Stack
-Prometheus:
+
+a) Prometheus:
 Version: 2.48.0+
 Purpose: Metrics collection and storage
 Retention: 30 days (configurable)
 Storage: ~500 MB/month
-Grafana:
+
+b) Grafana:
 Version: 10.2.0+
 Purpose: Dashboard visualization
 Data source: Prometheus
 Dashboards: Auto-provisioned from deploy/grafana/dashboards/
-Alertmanager (Optional):
+
+c) Alertmanager (Optional):
 Version: 0.26.0+
 Purpose: Alert routing and notification
 Integrations: Slack, email, PagerDuty
-Node Exporter (Optional):
+
+d) Node Exporter (Optional):
 Version: 1.6.0+
 Purpose: Host-level metrics (CPU, memory, disk)
 Deployment: DaemonSet on all nodes
-Kepler (Optional):
+
+e) Kepler (Optional):
 Version: 0.7.0+
 Purpose: Container-level energy metrics
 Integration: Provides node utilization to scheduler
 
 ### 2.6 External Dependencies
-WattTime API:
+
+a) WattTime API:
 URL: https://api.watttime.org/v3
 Authentication: JWT token (username/password)
 Rate limit: 30 requests/minute (free tier)
@@ -373,7 +381,7 @@ Signals: MOER (Marginal Operating Emissions Rate)
 Regions: U.S. balancing authorities (CAISO, MISO, ERCOT, etc.)
 Documentation: https://www.watttime.org/api-documentation/
 
-Alternative Data Sources (Experimental):
+b) Alternative Data Sources (Experimental):
 EIA API: U.S. Energy Information Administration (average CI, not MOER)
 Electricity Maps: Global carbon intensity data (commercial)
 Custom: Internal grid telemetry (requires custom integration)
