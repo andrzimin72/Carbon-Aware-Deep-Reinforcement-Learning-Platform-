@@ -1,0 +1,2 @@
+# Carbon-Aware-Deep-Reinforcement-Learning-Platform-
+The Kubernetes-native, carbon-aware workload scheduling platform. It operates as a custom Kubernetes controller that intercepts Pod scheduling requests and autonomously binds them to geo-distributed nodes. Its decision-making engine is powered by DRL (Recurrent PPO agent LSTM memory), and it is governed by a multi-layered risk management framework.
