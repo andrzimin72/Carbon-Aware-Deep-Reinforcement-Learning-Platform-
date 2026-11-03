@@ -1,0 +1,28 @@
+# =============================================================================
+# GRAFANA DASHBOARD PROVISIONING
+# =============================================================================
+# Auto-loads the Carbon-Aware Deep Reinforcement Learning Platform dashboard when Grafana starts.
+#
+# Location in container: /etc/grafana/provisioning/dashboards/carbon-aware.yaml
+#
+# The dashboard JSON is expected at:
+#   /var/lib/grafana/dashboards/carbon-aware-platform.json
+#
+# Mount it via docker-compose or Kubernetes ConfigMap.
+# =============================================================================
+
+apiVersion: 1
+
+providers:
+  - name: "carbon-aware-platform"
+    orgId: 1
+    folder: "Carbon-Aware"
+    folderUid: "carbon-aware-folder"
+    type: file
+    disableDeletion: false
+    editable: true
+    updateIntervalSeconds: 30
+    allowUiUpdates: true
+    options:
+      path: /var/lib/grafana/dashboards
+      foldersFromFilesStructure: false
