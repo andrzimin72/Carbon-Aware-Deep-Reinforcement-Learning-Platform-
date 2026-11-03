@@ -1,0 +1,101 @@
+# =============================================================================
+# DOCKER IGNORE FILE
+# =============================================================================
+# Excludes files from the Docker build context to speed up builds and
+# reduce image size. Place this at the project root alongside Dockerfiles.
+# =============================================================================
+
+# Version control
+.git
+.gitignore
+
+# Python artifacts
+__pycache__
+*.py[cod]
+*$py.class
+*.so
+*.egg
+*.egg-info
+dist
+build
+.eggs
+
+# Virtual environments
+.venv
+venv
+env
+ENV
+
+# IDE and editor files
+.vscode
+.idea
+*.swp
+*.swo
+*~
+.project
+.pydevproject
+
+# OS files
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Runtime data (gitignored, created at runtime)
+watttime_cache/
+checkpoints/
+outputs/
+logs/
+shadow_decisions.jsonl
+
+# Environment and secrets
+.env
+.env.*
+!env.example
+*.pem
+*.key
+
+# Testing and coverage
+.pytest_cache
+.coverage
+htmlcov
+.tox
+.nox
+
+# Jupyter
+.ipynb_checkpoints
+*.ipynb
+
+# Documentation build
+docs/_build
+site/
+
+# Docker files (avoid recursive context)
+docker-compose*.yml
+Dockerfile*
+.dockerignore
+
+# Kubernetes manifests (not needed in image)
+deploy/kubernetes/
+
+# Systemd units (not needed in image)
+deploy/systemd/
+
+# Large data files
+*.parquet
+*.pt
+*.pth
+*.bin
+*.h5
+*.hdf5
+*.zip
+*.tar.gz
+
+# CI/CD
+.github
+.gitlab-ci.yml
+.travis.yml
+
+# Misc
+*.log
+*.tmp
+*.bak
