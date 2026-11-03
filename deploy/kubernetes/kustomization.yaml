@@ -1,0 +1,102 @@
+# =============================================================================
+# KUSTOMIZE OVERLAY
+# =============================================================================
+# Kustomize configuration for deploying the carbon-aware scheduler.
+# Allows environment-specific overrides without modifying base manifests.
+# =============================================================================
+
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# Namespace for all resources
+namespace: carbon-aware
+
+# Common labels for all resources
+commonLabels:
+  app.kubernetes.io/managed-by: kustomize
+  app.kubernetes.io/part-of: carbon-aware-platform
+
+# Common annotations
+commonAnnotations:
+  app.kubernetes.io/version: "1.0.0"
+
+# Resources to include
+resources:
+  - rbac.yaml
+  - configmap.yaml
+  - deployment.yaml
+  - service.yaml
+  - cronjob.yaml
+  # Optional: PVCs (if not created separately)
+  # - persistent-volume-claims.yaml
+
+# Images to override (for different environments)
+images:
+  - name: your-registry/carbon-aware-controller
+    newTag: latest
+  - name: your-registry/carbon-aware-updater
+    newTag: latest
+
+# ConfigMap generator (alternative to inline configmap.yaml)
+# configMapGenerator:
+#   - name: carbon-aware-config
+#     files:
+#       - regions.yaml=config/regions.yaml
+#       - scheduler.yaml=config/scheduler.yaml
+
+# Secret generator (for credentials)
+secretGenerator:
+  - name: watttime-credentials
+    envs:
+      - watttime.env  # File containing WATTTIME_USERNAME and WATTTIME_PASSWORD
+    type: Opaque
+
+# Patches for environment-specific overrides
+patches:
+  # Example: Override resource limits for production
+  - target:
+      kind: Deployment
+      name: carbon-aware-controller
+    patch: |
+      - op: replace
+        path: /spec/template/spec/containers/0/resources/limits/cpu
+        value: "2000m"
+      - op: replace
+        path: /spec/template/spec/containers/0/resources/limits/memory
+        value: 4Gi
+  
+  # Example: Change schedule for CronJob
+  - target:
+      kind: CronJob
+      name: carbon-aware-daily-update
+    patch: |
+      - op: replace
+        path: /spec/schedule
+        value: "0 3 * * *"  # Run at 3 AM instead of 2 AM
+
+# Variables (for templating)
+# vars:
+#   - name: CONTROLLER_IMAGE
+#     objref:
+#       kind: Deployment
+#       name: carbon-aware-controller
+#       apiVersion: apps/v1
+#     fieldref:
+#       fieldpath: spec.template.spec.containers[0].image
+
+# Configurations for name references
+# configurations:
+#   - kustomize-config.yaml
+
+# Components (reusable kustomize snippets)
+# components:
+#   - ../components/monitoring
+#   - ../components/logging
+
+# Generator options
+generatorOptions:
+  disableNameSuffixHash: true
+
+# Build metadata
+buildMetadata:
+  - originAnnotations

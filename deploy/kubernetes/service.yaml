@@ -1,0 +1,54 @@
+# =============================================================================
+# SERVICE DEFINITIONS
+# =============================================================================
+# Exposes metrics and health endpoints for the controller.
+# =============================================================================
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: carbon-aware-controller
+  namespace: carbon-aware
+  labels:
+    app.kubernetes.io/name: carbon-aware-controller
+    app.kubernetes.io/component: controller
+    app.kubernetes.io/part-of: carbon-aware-platform
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: carbon-aware-controller
+    app.kubernetes.io/component: controller
+  
+  ports:
+    # Metrics endpoint (Prometheus)
+    - name: metrics
+      port: 8000
+      targetPort: metrics
+      protocol: TCP
+    
+    # Health check endpoint
+    - name: health
+      port: 8080
+      targetPort: health
+      protocol: TCP
+---
+# Optional: ServiceMonitor for Prometheus Operator
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: carbon-aware-controller
+  namespace: carbon-aware
+  labels:
+    app.kubernetes.io/name: carbon-aware-controller
+    app.kubernetes.io/component: controller
+    release: prometheus  # Match your Prometheus release label
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: carbon-aware-controller
+  
+  endpoints:
+    - port: metrics
+      interval: 30s
+      path: /metrics
+      scrapeTimeout: 10s

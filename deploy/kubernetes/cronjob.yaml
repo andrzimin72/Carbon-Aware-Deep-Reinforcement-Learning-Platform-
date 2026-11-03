@@ -1,0 +1,428 @@
+# =============================================================================
+# DAILY WATTTIME DATA UPDATE — CRONJOB
+# =============================================================================
+# Runs the data pipeline daily to keep the Parquet cache fresh.
+# Designed for production use with proper resource limits, security,
+# retry logic, and observability.
+#
+# Apply:
+#   kubectl apply -f deploy/kubernetes/cronjob.yaml
+#
+# Verify:
+#   kubectl get cronjobs -n carbon-aware
+#   kubectl describe cronjob carbon-aware-daily-update -n carbon-aware
+#
+# Trigger manually:
+#   kubectl create job --from=cronjob/carbon-aware-daily-update manual-update -n carbon-aware
+#
+# View logs of latest run:
+#   kubectl logs -l job-name=$(kubectl get jobs -n carbon-aware \
+#       --sort-by=.metadata.creationTimestamp -o jsonpath='{.items[-1].metadata.name}') \
+#       -n carbon-aware --tail=100
+#
+# Author: Carbon-Aware Deep Reinforcement Learning Platform
+# =============================================================================
+
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: carbon-aware-daily-update
+  namespace: carbon-aware
+  labels:
+    app.kubernetes.io/name: carbon-aware-updater
+    app.kubernetes.io/component: data-pipeline
+    app.kubernetes.io/part-of: carbon-aware-platform
+    app.kubernetes.io/version: "1.0.0"
+    app.kubernetes.io/managed-by: kubectl
+  annotations:
+    # Description for operators
+    description: "Downloads latest WattTime MOER data into the Parquet cache"
+    # Recommended monitoring alert if job fails N times in a row
+    alert-threshold: "3 consecutive failures"
+
+spec:
+  # -------------------------------------------------------------------------
+  # SCHEDULE
+  # -------------------------------------------------------------------------
+  # Run daily at 02:00 UTC (after most grid data has been published)
+  # Cron syntax: minute hour day-of-month month day-of-week
+  schedule: "0 2 * * *"
+
+  # Timezone for the schedule (important for consistent behavior across clusters)
+  timeZone: "Etc/UTC"
+
+  # -------------------------------------------------------------------------
+  # CONCURRENCY & HISTORY
+  # -------------------------------------------------------------------------
+  # Prevent overlapping runs (critical: two concurrent downloads could corrupt cache)
+  concurrencyPolicy: Forbid
+
+  # If the system was down at scheduled time, run ASAP after recovery
+  # This ensures we don't miss a day of data
+  startingDeadlineSeconds: 3600   # 1 hour grace period
+
+  # Keep history for debugging
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 5
+
+  # Don't suspend (set to true to pause the job temporarily)
+  suspend: false
+
+  # -------------------------------------------------------------------------
+  # JOB TEMPLATE
+  # -------------------------------------------------------------------------
+  jobTemplate:
+    metadata:
+      labels:
+        app.kubernetes.io/name: carbon-aware-updater
+        app.kubernetes.io/component: data-pipeline
+        app.kubernetes.io/part-of: carbon-aware-platform
+      annotations:
+        # Sidecar injection opt-out (if using Istio/Linkerd)
+        sidecar.istio.io/inject: "false"
+
+    spec:
+      # Job-level settings
+      # -------------------------------------------------------------------------
+      # Hard timeout: kill if job runs longer than 30 minutes
+      # Prevents hung jobs from blocking future runs
+      activeDeadlineSeconds: 1800
+
+      # Retry on failure (transient API errors, network issues)
+      backoffLimit: 3
+
+      # Backoff strategy: exponential with jitter
+      # First retry: ~1 min, second: ~2 min, third: ~4 min
+      backoffLimitPerIndex: 3
+
+      # Clean up completed jobs after 24 hours (saves etcd space)
+      ttlSecondsAfterFinished: 86400
+
+      # Pod-level settings
+      # -------------------------------------------------------------------------
+      template:
+        metadata:
+          labels:
+            app.kubernetes.io/name: carbon-aware-updater
+            app.kubernetes.io/component: data-pipeline
+            app.kubernetes.io/part-of: carbon-aware-platform
+          annotations:
+            # Prometheus scraping (if metrics endpoint is added later)
+            prometheus.io/scrape: "false"
+
+        spec:
+          # Service account with permissions to read/write cache PVC
+          serviceAccountName: carbon-aware-scheduler
+
+          # Restart policy for the pod's containers
+          # OnFailure = restart container if it exits non-zero, up to backoffLimit
+          restartPolicy: OnFailure
+
+          # -------------------------------------------------------------------------
+          # SECURITY CONTEXT (pod-level)
+          # -------------------------------------------------------------------------
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 1000
+            runAsGroup: 1000
+            fsGroup: 1000
+            seccompProfile:
+              type: RuntimeDefault
+
+          # -------------------------------------------------------------------------
+          # GRACEFUL SHUTDOWN
+          # -------------------------------------------------------------------------
+          terminationGracePeriodSeconds: 30
+
+          # -------------------------------------------------------------------------
+          # DNS CONFIGURATION
+          # -------------------------------------------------------------------------
+          # Use cluster DNS with reasonable timeouts
+          dnsPolicy: ClusterFirst
+          dnsConfig:
+            options:
+              - name: ndots
+                value: "2"
+
+          # -------------------------------------------------------------------------
+          # CONTAINERS
+          # -------------------------------------------------------------------------
+          containers:
+            - name: updater
+              # Image: lightweight updater (no PyTorch, ~200MB)
+              image: your-registry/carbon-aware-updater:latest
+              imagePullPolicy: IfNotPresent
+
+              # Command: run the daily update script
+              command: ["python", "-m", "src.watttime.daily_update"]
+              args:
+                - "--regions"
+                - "CAISO_NORTH"
+                - "MISO"
+                - "ERCOT"
+                - "--lookback"
+                - "2"
+                - "--cache-dir"
+                - "/app/watttime_cache"
+                - "--log-dir"
+                - "/app/logs"
+                - "--verbose"
+
+              # -------------------------------------------------------------------------
+              # ENVIRONMENT VARIABLES
+              # -------------------------------------------------------------------------
+              env:
+                # WattTime credentials from Kubernetes Secret
+                - name: WATTTIME_USERNAME
+                  valueFrom:
+                    secretKeyRef:
+                      name: watttime-credentials
+                      key: username
+                - name: WATTTIME_PASSWORD
+                  valueFrom:
+                    secretKeyRef:
+                      name: watttime-credentials
+                      key: password
+
+                # Python runtime settings
+                - name: PYTHONUNBUFFERED
+                  value: "1"
+                - name: PYTHONDONTWRITEBYTECODE
+                  value: "1"
+                - name: PYTHONHASHSEED
+                  value: "0"   # Deterministic hashing for reproducibility
+
+                # Logging
+                - name: LOG_LEVEL
+                  value: "INFO"
+
+                # Optional: notification webhook
+                # - name: NOTIFICATION_WEBHOOK
+                #   valueFrom:
+                #     secretKeyRef:
+                #       name: notification-webhook
+                #       key: url
+
+              # -------------------------------------------------------------------------
+              # RESOURCE LIMITS
+              # -------------------------------------------------------------------------
+              # Carefully tuned for the updater workload:
+              # - CPU: mostly I/O bound, brief bursts during Parquet writes
+              # - Memory: pandas + pyarrow need ~200-400MB for 90 days of data
+              resources:
+                requests:
+                  cpu: "100m"       # Guaranteed minimum
+                  memory: "256Mi"   # Enough for typical runs
+                limits:
+                  cpu: "500m"       # Cap to prevent noisy-neighbor issues
+                  memory: "1Gi"     # Headroom for large downloads
+
+              # -------------------------------------------------------------------------
+              # CONTAINER-LEVEL SECURITY
+              # -------------------------------------------------------------------------
+              securityContext:
+                allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: true
+                capabilities:
+                  drop:
+                    - ALL
+
+              # -------------------------------------------------------------------------
+              # VOLUME MOUNTS
+              # -------------------------------------------------------------------------
+              volumeMounts:
+                # WattTime Parquet cache (persistent across runs)
+                - name: cache
+                  mountPath: /app/watttime_cache
+                  subPath: watttime_cache   # Isolate from other data on PVC
+
+                # Logs (ephemeral, rotated by sidecar or log collector)
+                - name: logs
+                  mountPath: /app/logs
+
+                # Writable /tmp for Python temp files
+                - name: tmp
+                  mountPath: /tmp
+
+                # Read-only config (if needed)
+                - name: config
+                  mountPath: /app/config
+                  readOnly: true
+
+              # -------------------------------------------------------------------------
+              # PROBES
+              # -------------------------------------------------------------------------
+              # No liveness/readiness for CronJob pods (they run to completion)
+              # But we add a startup probe to catch image/config issues early
+              startupProbe:
+                exec:
+                  command:
+                    - python
+                    - -c
+                    - "from src.watttime.pipeline import WattTimeDataPipeline; print('ok')"
+                initialDelaySeconds: 5
+                periodSeconds: 5
+                failureThreshold: 6   # 30 seconds to start
+                timeoutSeconds: 10
+
+          # -------------------------------------------------------------------------
+          # VOLUMES
+          # -------------------------------------------------------------------------
+          volumes:
+            # Persistent cache (shared with controller)
+            - name: cache
+              persistentVolumeClaim:
+                claimName: carbon-aware-cache
+
+            # Ephemeral logs
+            - name: logs
+              emptyDir:
+                sizeLimit: 512Mi
+                medium: ""   # Use disk (not memory)
+
+            # Ephemeral tmp
+            - name: tmp
+              emptyDir:
+                sizeLimit: 256Mi
+
+            # ConfigMap (optional)
+            - name: config
+              configMap:
+                name: carbon-aware-config
+                optional: true   # Don't fail if ConfigMap doesn't exist
+
+          # -------------------------------------------------------------------------
+          # IMAGE PULL SECRETS (for private registries)
+          # -------------------------------------------------------------------------
+          # imagePullSecrets:
+          #   - name: registry-credentials
+
+          # -------------------------------------------------------------------------
+          # NODE SELECTION (optional)
+          # -------------------------------------------------------------------------
+          # Prefer nodes with more memory for data processing
+          # affinity:
+          #   nodeAffinity:
+          #     preferredDuringSchedulingIgnoredDuringExecution:
+          #       - weight: 100
+          #         preference:
+          #           matchExpressions:
+          #             - key: node.kubernetes.io/instance-type
+          #               operator: In
+          #               values: ["m5.xlarge", "m5.2xlarge"]
+
+          # -------------------------------------------------------------------------
+          # TOLERATIONS (optional)
+          # -------------------------------------------------------------------------
+          # tolerations:
+          #   - key: "dedicated"
+          #     operator: "Equal"
+          #     value: "batch"
+          #     effect: "NoSchedule"
+
+          # -------------------------------------------------------------------------
+          # PRIORITY (optional)
+          # -------------------------------------------------------------------------
+          # Lower priority than interactive workloads
+          # priorityClassName: batch-low-priority
+
+---
+# =============================================================================
+# MANUAL JOB TEMPLATE (for ad-hoc runs)
+# =============================================================================
+# Apply this to trigger a one-off update (e.g., after cache corruption):
+#   kubectl apply -f deploy/kubernetes/cronjob.yaml --selector job=manual
+#
+# Or use the CronJob as a template:
+#   kubectl create job --from=cronjob/carbon-aware-daily-update manual-update -n carbon-aware
+
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: carbon-aware-manual-update
+  namespace: carbon-aware
+  labels:
+    app.kubernetes.io/name: carbon-aware-updater
+    app.kubernetes.io/component: data-pipeline
+    job-type: manual
+  annotations:
+    description: "Manual one-off data update (delete after completion)"
+spec:
+  # Don't retry manual runs — if it fails, investigate manually
+  backoffLimit: 0
+  activeDeadlineSeconds: 1800
+  ttlSecondsAfterFinished: 3600   # Clean up after 1 hour
+
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: carbon-aware-updater
+        job-type: manual
+    spec:
+      serviceAccountName: carbon-aware-scheduler
+      restartPolicy: Never   # Manual jobs don't retry at pod level
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+      containers:
+        - name: updater
+          image: your-registry/carbon-aware-updater:latest
+          imagePullPolicy: IfNotPresent
+          command: ["python", "-m", "src.watttime.daily_update"]
+          args:
+            - "--regions"
+            - "CAISO_NORTH"
+            - "MISO"
+            - "ERCOT"
+            - "--lookback"
+            - "7"   # Manual runs can catch up more days
+            - "--cache-dir"
+            - "/app/watttime_cache"
+            - "--log-dir"
+            - "/app/logs"
+            - "--verbose"
+          env:
+            - name: WATTTIME_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: watttime-credentials
+                  key: username
+            - name: WATTTIME_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: watttime-credentials
+                  key: password
+            - name: PYTHONUNBUFFERED
+              value: "1"
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "256Mi"
+            limits:
+              cpu: "500m"
+              memory: "1Gi"
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - name: cache
+              mountPath: /app/watttime_cache
+              subPath: watttime_cache
+            - name: logs
+              mountPath: /app/logs
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: cache
+          persistentVolumeClaim:
+            claimName: carbon-aware-cache
+        - name: logs
+          emptyDir:
+            sizeLimit: 512Mi
+        - name: tmp
+          emptyDir:
+            sizeLimit: 256Mi

@@ -1,0 +1,323 @@
+# =============================================================================
+# CONFIGMAP
+# =============================================================================
+# Non-secret configuration for the carbon-aware scheduler.
+# Secrets (WattTime credentials) are stored separately.
+# =============================================================================
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: carbon-aware-config
+  namespace: carbon-aware
+  labels:
+    app.kubernetes.io/name: carbon-aware-scheduler
+    app.kubernetes.io/component: config
+    app.kubernetes.io/part-of: carbon-aware-platform
+data:
+  # regions.yaml (embedded)
+  regions.yaml: |
+    global:
+      watttime:
+        api_version: "v3"
+        base_url: "https://api.watttime.org/v3"
+        signal_type: "MOER"
+        units: "g"
+        requests_per_minute: 30
+        retry_on_failure: true
+        max_retries: 3
+      
+      defaults:
+        max_utilization: 0.85
+        clean_threshold_gco2_per_kwh: 250
+        dirty_threshold_gco2_per_kwh: 500
+    
+    regions:
+      - name: "caiso_north"
+        display_name: "California (Northern)"
+        watttime_code: "CAISO_NORTH"
+        watttime_timezone: "America/Los_Angeles"
+        k8s_node: "node-caiso"
+        k8s_namespace: "carbon-aware"
+        location:
+          latitude: 37.7749
+          longitude: -122.4194
+          city: "San Francisco"
+          state: "CA"
+          country: "US"
+        grid_profile:
+          type: "mixed"
+          renewable_fraction: 0.45
+          typical_ci_range: [150, 500]
+          peak_solar_hour: 13
+          peak_wind_hour: 2
+        overrides:
+          max_utilization: 0.90
+          priority: 1
+        metadata:
+          provider: "AWS"
+          instance_type: "m5.2xlarge"
+          cpu_cores: 8
+          memory_gb: 32
+          gpu: false
+      
+      - name: "miso"
+        display_name: "Midwest (MISO)"
+        watttime_code: "MISO"
+        watttime_timezone: "America/Chicago"
+        k8s_node: "node-miso"
+        k8s_namespace: "carbon-aware"
+        location:
+          latitude: 41.8781
+          longitude: -87.6298
+          city: "Chicago"
+          state: "IL"
+          country: "US"
+        grid_profile:
+          type: "wind"
+          renewable_fraction: 0.30
+          typical_ci_range: [200, 600]
+          peak_solar_hour: 13
+          peak_wind_hour: 3
+        overrides:
+          max_utilization: 0.85
+          priority: 2
+        metadata:
+          provider: "GCP"
+          instance_type: "n2-standard-8"
+          cpu_cores: 8
+          memory_gb: 32
+          gpu: false
+      
+      - name: "ercot"
+        display_name: "Texas (ERCOT)"
+        watttime_code: "ERCOT"
+        watttime_timezone: "America/Chicago"
+        k8s_node: "node-ercot"
+        k8s_namespace: "carbon-aware"
+        location:
+          latitude: 30.2672
+          longitude: -97.7431
+          city: "Austin"
+          state: "TX"
+          country: "US"
+        grid_profile:
+          type: "mixed"
+          renewable_fraction: 0.35
+          typical_ci_range: [250, 700]
+          peak_solar_hour: 14
+          peak_wind_hour: 2
+        overrides:
+          max_utilization: 0.80
+          priority: 3
+        metadata:
+          provider: "Azure"
+          instance_type: "Standard_D8s_v5"
+          cpu_cores: 8
+          memory_gb: 32
+          gpu: true
+          gpu_model: "NVIDIA A100"
+    
+    latency_matrix:
+      - ["caiso_north", "miso", 60]
+      - ["caiso_north", "ercot", 50]
+      - ["miso", "ercot", 40]
+      - ["miso", "caiso_north", 60]
+      - ["ercot", "caiso_north", 50]
+      - ["ercot", "miso", 40]
+    
+    fallback:
+      max_staleness_hours: 2
+      default_action: "local"
+      critical_regions:
+        - "caiso_north"
+  
+  # scheduler.yaml (embedded)
+  scheduler.yaml: |
+    agent:
+      architecture:
+        hidden_dim: 64
+        num_lstm_layers: 1
+        window_size: 5
+        actor_layers: [64, 32]
+        actor_activation: "relu"
+        critic_layers: [64, 32]
+        critic_activation: "relu"
+      
+      ppo:
+        learning_rate: 3.0e-4
+        gamma: 0.99
+        gae_lambda: 0.95
+        eps_clip: 0.2
+        k_epochs: 4
+        entropy_coef: 0.01
+        value_loss_coef: 0.5
+        max_grad_norm: 0.5
+      
+      training:
+        max_episodes: 500
+        tasks_per_episode: 24
+        batch_size: 64
+        rollout_buffer_size: 2048
+        early_stopping:
+          enabled: true
+          patience: 50
+          min_delta: 0.01
+        checkpointing:
+          enabled: true
+          save_every_n_episodes: 50
+          keep_last_n: 5
+          save_best: true
+      
+      evaluation:
+        eval_every_n_episodes: 50
+        eval_episodes: 10
+        eval_seed_offset: 1000
+    
+    safety_gate:
+      utilization:
+        max_utilization: 0.85
+        critical_utilization: 0.95
+        hysteresis_enabled: true
+      
+      data_freshness:
+        max_staleness_hours: 2.0
+        max_forecast_age_hours: 2.0
+        stale_data_action: "local"
+      
+      task_rules:
+        interactive:
+          force_local: true
+          local_node: 0
+          max_latency_ms: 100
+        batch:
+          force_local: false
+          max_delay_hours: 12
+          carbon_weight: 0.8
+          latency_weight: 0.1
+          migration_weight: 0.1
+        stateful:
+          force_local: false
+          migration_penalty_multiplier: 3.0
+          min_dwell_time_hours: 2
+      
+      anti_flapping:
+        enabled: true
+        min_dwell_time_hours: 2
+        max_migrations_per_hour: 3
+      
+      capacity:
+        max_post_schedule_utilization: 0.90
+        interactive_reserve_fraction: 0.20
+    
+    environment:
+      carbon:
+        idle_power_watts: 150
+        exec_power_watts: 300
+        migration_network_energy_j_per_mb: 0.05
+        migration_transient_power_watts: 150
+        migration_transient_time_sec: 60
+        ci_units: "gCO2e_per_kWh"
+      
+      rewards:
+        migration_penalty_type: "flat"
+        migration_penalty_flat_gco2: 15.0
+        sla_penalty_type: "step"
+        sla_penalty_step_gco2: 50.0
+        sla_penalty_linear_factor: 0.1
+        delay_penalty_per_hour_gco2: 5.0
+      
+      task_generation:
+        profiles:
+          interactive:
+            probability: 0.3
+            size_mb_range: [10, 100]
+            exec_time_sec_range: [10, 60]
+            sla_latency_ms_range: [50, 150]
+          batch:
+            probability: 0.5
+            size_mb_range: [50, 500]
+            exec_time_sec_range: [60, 600]
+            sla_latency_ms_range: [500, 2000]
+          stateful:
+            probability: 0.2
+            size_mb_range: [100, 1000]
+            exec_time_sec_range: [300, 1800]
+            sla_latency_ms_range: [200, 500]
+        source_node:
+          new_task_probability: 0.3
+          existing_task_probability: 0.7
+      
+      normalization:
+        ci_scale: 800.0
+        ci_clip_max: 800.0
+        utilization_clip: [0.0, 1.0]
+        task_size_mb_scale: 500.0
+        task_exec_time_sec_scale: 600.0
+        task_sla_latency_ms_scale: 200.0
+    
+    training:
+      data:
+        replay_buffer_path: "/app/watttime_cache"
+        train_fraction: 0.8
+        min_train_hours: 100
+        min_test_hours: 50
+      seeds:
+        base_seed: 42
+        num_seeds: 5
+        seed_list: [42, 123, 456, 789, 1024]
+      output:
+        checkpoint_dir: "/app/checkpoints"
+        log_dir: "/app/logs/training"
+    
+    inference:
+      shadow:
+        decision_interval_sec: 300
+        warmup_hours: 24
+        output_file: "/app/shadow_decisions.jsonl"
+        max_decisions: null
+      kubernetes:
+        namespace: "carbon-aware"
+        watch_timeout_sec: 300
+        reconnect_delay_sec: 5
+        annotations:
+          enabled: "carbon-aware.io/enabled"
+          profile: "carbon-aware.io/profile"
+          size_mb: "carbon-aware.io/size-mb"
+          exec_time_sec: "carbon-aware.io/exec-time-sec"
+          sla_latency_ms: "carbon-aware.io/sla-latency-ms"
+          source_node: "carbon-aware.io/source-node"
+          decision: "carbon-aware.io/decision"
+    
+    logging:
+      level: "INFO"
+      format: "%(asctime)s [%(levelname)s] %(name)s: %(message)s"
+      date_format: "%Y-%m-%d %H:%M:%S"
+      modules:
+        watttime_client: "INFO"
+        k8s_controller: "INFO"
+        shadow_runner: "INFO"
+        ppo_agent: "WARNING"
+        matplotlib: "WARNING"
+        urllib3: "WARNING"
+      file:
+        enabled: true
+        path: "/app/logs/app.log"
+        max_size_mb: 100
+        backup_count: 10
+    
+    monitoring:
+      prometheus:
+        enabled: true
+        port: 8000
+        path: "/metrics"
+      health_check:
+        enabled: true
+        port: 8080
+        path: "/health"
+  
+  # Additional configuration files can be added here
+  # example-config.json: |
+  #   {
+  #     "key": "value"
+  #   }

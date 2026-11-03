@@ -1,0 +1,203 @@
+# =============================================================================
+# CONTROLLER DEPLOYMENT
+# =============================================================================
+# Main deployment for the carbon-aware scheduler controller.
+# Runs the PPO agent and watches for annotated Pods to schedul.
+# =============================================================================
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: carbon-aware-controller
+  namespace: carbon-aware
+  labels:
+    app.kubernetes.io/name: carbon-aware-controller
+    app.kubernetes.io/component: controller
+    app.kubernetes.io/part-of: carbon-aware-platform
+    app.kubernetes.io/version: "1.0.0"
+spec:
+  # CRITICAL: Must be 1 to avoid duplicate Pod bindings
+  replicas: 1
+  
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0      # Don't stop old pod until new one is ready
+      maxSurge: 1            # Allow one extra pod during rollout
+  
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: carbon-aware-controller
+      app.kubernetes.io/component: controller
+  
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: carbon-aware-controller
+        app.kubernetes.io/component: controller
+        app.kubernetes.io/part-of: carbon-aware-platform
+      annotations:
+        # Force pod restart when ConfigMap changes
+        checksum/config: "{{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}"
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8000"
+        prometheus.io/path: "/metrics"
+    
+    spec:
+      serviceAccountName: carbon-aware-scheduler
+      
+      # Security context for the pod
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+      
+      # Graceful shutdown
+      terminationGracePeriodSeconds: 60
+      
+      containers:
+        - name: controller
+          image: your-registry/carbon-aware-controller:latest
+          imagePullPolicy: Always
+          
+          # Command and arguments
+          command: ["python", "-m", "src.deployment.k8s_controller"]
+          args:
+            - "--checkpoint=/app/checkpoints/ppo_window5.pt"
+            - "--regions=CAISO_NORTH,MISO,ERCOT"
+            - "--node-names=node-caiso,node-miso,node-ercot"
+            - "--namespace=carbon-aware"
+            - "--window-size=5"
+            - "--device=cpu"
+            - "--prometheus-url=http://prometheus-operated.monitoring:9090"
+            - "--log-level=INFO"
+          
+          # Environment variables
+          env:
+            - name: WATTTIME_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: watttime-credentials
+                  key: username
+            - name: WATTTIME_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: watttime-credentials
+                  key: password
+            - name: PYTHONUNBUFFERED
+              value: "1"
+            - name: LOG_LEVEL
+              value: "INFO"
+          
+          # Ports
+          ports:
+            - name: metrics
+              containerPort: 8000
+              protocol: TCP
+            - name: health
+              containerPort: 8080
+              protocol: TCP
+          
+          # Resource limits
+          resources:
+            requests:
+              cpu: "200m"
+              memory: "512Mi"
+            limits:
+              cpu: "1000m"
+              memory: "2Gi"
+          
+          # Health checks
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: health
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: health
+            initialDelaySeconds: 10
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 3
+          
+          startupProbe:
+            httpGet:
+              path: /health
+              port: health
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 12  # 60 seconds to start
+          
+          # Volume mounts
+          volumeMounts:
+            - name: config
+              mountPath: /app/config
+              readOnly: true
+            - name: checkpoints
+              mountPath: /app/checkpoints
+              readOnly: true
+            - name: cache
+              mountPath: /app/watttime_cache
+            - name: logs
+              mountPath: /app/logs
+            - name: tmp
+              mountPath: /tmp
+          
+          # Security context for the container
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop:
+                - ALL
+      
+      # Volumes
+      volumes:
+        - name: config
+          configMap:
+            name: carbon-aware-config
+        - name: checkpoints
+          persistentVolumeClaim:
+            claimName: carbon-aware-checkpoints
+        - name: cache
+          persistentVolumeClaim:
+            claimName: carbon-aware-cache
+        - name: logs
+          emptyDir:
+            sizeLimit: 1Gi
+        - name: tmp
+          emptyDir:
+            sizeLimit: 512Mi
+      
+      # Node selector (optional: run on specific nodes)
+      # nodeSelector:
+      #   kubernetes.io/arch: amd64
+      
+      # Tolerations (optional: allow scheduling on tainted nodes)
+      # tolerations:
+      #   - key: "dedicated"
+      #     operator: "Equal"
+      #     value: "scheduling"
+      #     effect: "NoSchedule"
+      
+      # Affinity (optional: prefer certain nodes)
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                labelSelector:
+                  matchExpressions:
+                    - key: app.kubernetes.io/name
+                      operator: In
+                      values:
+                        - carbon-aware-controller
+                topologyKey: kubernetes.io/hostname

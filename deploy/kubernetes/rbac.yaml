@@ -1,0 +1,132 @@
+# =============================================================================
+# RBAC CONFIGURATION
+# =============================================================================
+# ServiceAccount, ClusterRole, and ClusterRoleBinding for the carbon-aware
+# scheduler controller. Grants minimal permissions needed for Pod scheduling.
+# =============================================================================
+
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: carbon-aware
+  labels:
+    app.kubernetes.io/name: carbon-aware-scheduler
+    app.kubernetes.io/part-of: carbon-aware-platform
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: carbon-aware-scheduler
+  namespace: carbon-aware
+  labels:
+    app.kubernetes.io/name: carbon-aware-scheduler
+    app.kubernetes.io/component: controller
+    app.kubernetes.io/part-of: carbon-aware-platform
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: carbon-aware-scheduler
+  labels:
+    app.kubernetes.io/name: carbon-aware-scheduler
+    app.kubernetes.io/component: controller
+rules:
+  # Watch and list Pods in the carbon-aware namespace
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list", "watch"]
+  
+  # Bind Pods to nodes (critical permission for custom scheduling)
+  - apiGroups: [""]
+    resources: ["pods/binding"]
+    verbs: ["create"]
+  
+  # Read Pod status to check scheduling state
+  - apiGroups: [""]
+    resources: ["pods/status"]
+    verbs: ["get", "patch", "update"]
+  
+  # Read Nodes for utilization metadata and capacity
+  - apiGroups: [""]
+    resources: ["nodes"]
+    verbs: ["get", "list", "watch"]
+  
+  # Read Node status for conditions and capacity
+  - apiGroups: [""]
+    resources: ["nodes/status"]
+    verbs: ["get"]
+  
+  # Create Events for audit logging and debugging
+  - apiGroups: [""]
+    resources: ["events"]
+    verbs: ["create", "patch"]
+  
+  # Read ConfigMaps for configuration
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    verbs: ["get", "list", "watch"]
+  
+  # Read Secrets for credentials (WattTime API)
+  - apiGroups: [""]
+    resources: ["secrets"]
+    verbs: ["get"]
+    resourceNames:
+      - watttime-credentials
+  
+  # Read PersistentVolumeClaims for cache storage
+  - apiGroups: [""]
+    resources: ["persistentvolumeclaims"]
+    verbs: ["get", "list"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: carbon-aware-scheduler
+  labels:
+    app.kubernetes.io/name: carbon-aware-scheduler
+    app.kubernetes.io/component: controller
+subjects:
+  - kind: ServiceAccount
+    name: carbon-aware-scheduler
+    namespace: carbon-aware
+roleRef:
+  kind: ClusterRole
+  name: carbon-aware-scheduler
+  apiGroup: rbac.authorization.k8s.io
+---
+# Additional Role for namespace-scoped operations (more restrictive)
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: carbon-aware-scheduler-namespace
+  namespace: carbon-aware
+  labels:
+    app.kubernetes.io/name: carbon-aware-scheduler
+    app.kubernetes.io/component: controller
+rules:
+  # Manage Pods in the carbon-aware namespace
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list", "watch", "patch", "update"]
+  
+  # Read ConfigMaps in the namespace
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: carbon-aware-scheduler-namespace
+  namespace: carbon-aware
+  labels:
+    app.kubernetes.io/name: carbon-aware-scheduler
+    app.kubernetes.io/component: controller
+subjects:
+  - kind: ServiceAccount
+    name: carbon-aware-scheduler
+    namespace: carbon-aware
+roleRef:
+  kind: Role
+  name: carbon-aware-scheduler-namespace
+  apiGroup: rbac.authorization.k8s.io

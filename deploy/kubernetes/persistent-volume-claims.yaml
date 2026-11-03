@@ -1,0 +1,31 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: carbon-aware-cache
+  namespace: carbon-aware
+  labels:
+    app.kubernetes.io/name: carbon-aware-scheduler
+    app.kubernetes.io/component: storage
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 10Gi
+  storageClassName: standard
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: carbon-aware-checkpoints
+  namespace: carbon-aware
+  labels:
+    app.kubernetes.io/name: carbon-aware-scheduler
+    app.kubernetes.io/component: storage
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 5Gi
+  storageClassName: standard
