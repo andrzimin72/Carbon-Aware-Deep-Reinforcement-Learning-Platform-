@@ -1,0 +1,78 @@
+The logs/ directory serves as the operational flight recorder for the Carbon-Aware Deep Reinforcement Learning Platform.
+While the outputs/ folder contains analytical artifacts (charts, statistical reports) and checkpoints/ contains AI model weights, the logs/ folder contains real-time, runtime telemetry. It captures exactly what the system is doing, second-by-second, which is critical for debugging, incident response, and compliance auditing.
+Here is the exact structure of the logs/ folder and the information contained within each file, based on the centralized logging configuration (src/utils/logging_config.py) we built.
+
+1. The Directory Structure
+
+logs/
+├── controller.log              # Active log for the live Kubernetes controller
+├── shadow.log                  # Active log for the shadow-mode runner
+├── updater_20261027.log        # Daily log for the WattTime data cronjob
+├── updater_20261026.log        # (Rotated daily log)
+├── training/                   # ML training and ablation logs
+│   ├── train_window5_seed42.log
+│   ├── train_window1_seed42.log
+│   └── ablation_run_20261027.log
+└── (Rotated/Compressed Archives)
+    ├── controller.log.1
+    ├── controller.log.2.gz
+    └── shadow.log.1
+
+(Note: Like outputs/ and checkpoints/, this entire directory is strictly gitignored. It is generated at runtime).
+
+2. Detailed Breakdown of Log Files
+A. controller.log (Production Runtime)
+Purpose: Tracks the live execution of the Kubernetes Pod controller. This is the most critical log for Site Reliability Engineers (SREs).
+Information it contains:
+- Initialization: Loading the model checkpoint, verifying provenance, warming up the LSTM memory with historical data.
+- Pod Watch Events: Detecting new Pending Pods with the carbon-aware.io/enabled: "true" annotation.
+- Decision Making: The exact node chosen, the AI's confidence score, and the critic's value estimate.
+- Safety Gate Outcomes: Whether the decision was accepted or overridden (e.g., capacity_guard, latency_sensitive_stays_local).
+- Circuit Breaker State: Alerts when the circuit breaker trips into "Safe Mode" due to high error rates, and when it recovers.
+- API Interactions: Successful or failed calls to the WattTime API and Kubernetes API.
+
+B. shadow.log (Validation Runtime)
+Purpose: Tracks the non-executing shadow runner. Used during the mandatory 7-to-14 day validation period before a new model is deployed to production.
+Information it contains:
+- All the same decision-making data as controller.log, but explicitly marked as NO_EXECUTION.
+- Carbon Savings Estimates: Calculates and logs the estimated gCO₂e saved compared to a local-only baseline.
+- Model Drift Detection: Highlights discrepancies between the AI's confidence and the actual grid conditions.
+
+C. updater_YYYYMMDD.log (Data Pipeline)
+Purpose: Tracks the daily cronjob that downloads historical WattTime MOER data and updates the Parquet cache.
+Information it contains:
+- Authentication: Successful JWT token acquisition from the WattTime API.
+- Download Progress: Number of data points fetched per region (CAISO, MISO, ERCOT).
+- Cache Operations: Writing to Parquet files, updating metadata.json.
+- Failures: Rate limit errors, network timeouts, or invalid credentials.
+
+D. training/ (ML Operations)
+Purpose: Records the progress of the PPO agent during the training phase.
+Information it contains:
+- Episode Metrics: Cumulative reward, total carbon emitted, number of SLA violations per episode.
+- Loss Components: Actor loss, critic loss, and entropy (to monitor exploration vs. exploitation).
+- Evaluation: Performance on the held-out test set at the end of training.
+
+3. Log Formatting and Management
+To ensure these logs are useful in an enterprise environment, they adhere to strict management rules defined in our architecture:
+Standardized Format
+Every log line follows a strict, parseable format:
+[Timestamp] [LogLevel] [ComponentName] [Optional RequestID]: Message
+- Timestamp: ISO 8601 UTC format for global consistency.
+- LogLevel: DEBUG, INFO, WARNING, ERROR, CRITICAL.
+- Request ID: A unique 8-character hex string (e.g., [req-a3f21b09]) attached to every log line related to a specific Pod scheduling decision. This allows SREs to filter the logs and see the exact lifecycle of a single decision.
+Log Rotation (Automated)
+Logs are never allowed to grow infinitely and crash the disk. We use logrotate (configured in deploy/logrotate/carbon-aware):
+- Controller & Shadow Logs: Size-based rotation. When the file hits 50 MB, it is renamed to .log.1, compressed to .gz, and a fresh file is started. Keeps the last 10 rotations (~500 MB max).
+- Updater Logs: Time-based rotation. One file per day. Keeps the last 30 days.
+Structured JSON Mode (Optional)
+If the platform is deployed in an environment using ELK (Elasticsearch, Logstash, Kibana) or Grafana Loki, the logging configuration can be flipped to json_logs=True. The log lines then become JSON objects:
+
+4. A Note on the Audit Trail (shadow_decisions.jsonl)
+While technically an audit data file rather than a standard text log, the shadow_decisions.jsonl file is intimately related to the logs.
+While shadow.log tells you what the system did (e.g., "Made decision #142"), the shadow_decisions.jsonl file contains the complete, immutable state of the world at the exact millisecond the decision was made (the exact carbon intensity of all 3 regions, the exact task features, the model hash, and the git commit).
+- Use logs/shadow.log to debug system crashes, API errors, or circuit breaker trips.
+- Use shadow_decisions.jsonl to perform data science, calculate exact carbon savings, and prove compliance to auditors.
+
+Summary
+The logs/ folder is the system's nervous system feedback loop. It provides the granular, time-stamped, and request-correlated telemetry required to prove that the AI is operating safely, to debug issues when the grid behaves unpredictably, and to satisfy the rigorous observability requirements of modern cloud-native infrastructure.
