@@ -1,0 +1,9 @@
+checkpoints/
+├── ppo_window1_seed42.pt          # The raw neural network weights
+├── ppo_window1_seed42.json        # The metadata "birth certificate"
+├── ppo_window5_seed42.pt          # The trained LSTM agent (Seed 42)
+├── ppo_window5_seed42.json        # Its metadata
+├── ppo_window5_seed123.pt         # The trained LSTM agent (Seed 123)
+├── ppo_window5_seed123.json       # Its metadata
+├── ppo_window5.pt                 # Symlink/Copy: The "production" model
+└── ppo_window5.json               # Symlink/Copy: The "production" metadata
