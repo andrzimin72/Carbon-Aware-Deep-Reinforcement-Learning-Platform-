@@ -1,3 +1,8 @@
+The checkpoints/ folder is the "vault" where the trained brains of our AI agents are stored. Because this platform is designed for enterprise production, we do not just save the raw model weights; we also save a strict metadata "birth certificate" for every model to ensure security, auditability, and reproducibility.
+Here is exactly what belongs in the checkpoints/ folder and the precise information contained within each file.
+
+1. The File Structure
+The folder should contain pairs of files: a binary PyTorch weight file (.pt) and its corresponding JSON metadata sidecar (.json).
 checkpoints/
 ├── ppo_window1_seed42.pt          # The raw neural network weights
 ├── ppo_window1_seed42.json        # The metadata "birth certificate"
@@ -7,3 +12,36 @@ checkpoints/
 ├── ppo_window5_seed123.json       # Its metadata
 ├── ppo_window5.pt                 # Symlink/Copy: The "production" model
 └── ppo_window5.json               # Symlink/Copy: The "production" metadata
+
+(Note: As defined in your .gitignore, this entire folder should be ignored by Git. Models are binary artifacts and should be stored in AWS S3, GCP Cloud Storage, or a dedicated Model Registry like MLflow, and downloaded during deployment.)
+
+2. The .pt File (The Model Weights)
+What it is: A binary file created by PyTorch (torch.save()).
+What’s inside: It contains the state_dict of the RecurrentActorCriticPPO neural network. This is essentially a dictionary mapping every layer name (e.g., lstm.weight_ih_l0, actor.2.weight) to its specific numerical tensor values (the "memories" the AI learned during training).
+How it is used:
+When the Kubernetes Controller or Shadow Runner starts, it calls load_policy(). PyTorch reads this binary file and injects these exact numbers into the neural network architecture, bringing the AI "to life" with the specific knowledge it learned during training.
+
+3. The .json Sidecar File (The Metadata & Provenance)
+What it is: A human-readable text file that describes exactly how, when, and where the .pt file was created.
+Why it exists: In enterprise AI, you never load a model without verifying its provenance. This file prevents accidental deployment of untrained models, ensures the architecture matches the code, and provides an audit trail.
+
+Breakdown of the JSON Fields:
+- schema_version: Ensures future versions of the code can parse older checkpoint metadata.
+- filename & sha256: The exact name and the cryptographic hash of the .pt file. When the controller loads the model, it calculates the hash of the .pt file and compares it to this value. If they don't match, the model is rejected (prevents tampering or file corruption).
+- git_commit: The exact Git commit hash of the codebase when this model was trained. If you need to debug why a model is behaving strangely 6 months from now, you can check out this exact commit to see the code that created it.
+- architecture: The hyperparameters used to build the neural network. The loader uses this to verify that the .pt file actually matches the window_size and num_nodes the controller is configured to use.
+- training: The most critical section for operations.
+- status: Must be "trained". If it says "UNTRAINED_RANDOM_INITIALIZATION", the system will refuse to deploy it to production.
+- final_avg_reward: Allows operators to quickly see if the model actually learned anything without having to run it.
+- warnings: Used for mock/smoke-test checkpoints. If a model was generated just to test the pipeline (like we did with generate_checkpoints.py), this array will contain: ["Not a trained policy. Actions are effectively arbitrary."].
+
+4. How the Platform Uses These Files
+The integration of the .pt and .json files is what makes the platform "Enterprise-Grade":
+The Shadow Runner starts up. It is pointed at checkpoints/ppo_window5.pt.
+Provenance Check: It immediately looks for checkpoints/ppo_window5.json. If the JSON is missing, it logs a warning.
+Safety Gate: It reads the training.status in the JSON. If it sees UNTRAINED_RANDOM_INITIALIZATION, it throws a RuntimeError and crashes safely, refusing to run.
+Integrity Check: It calculates the SHA-256 hash of the .pt file and ensures it matches the sha256 string in the JSON.
+Architecture Check: It reads window_size: 5 from the JSON and ensures the controller is configured with --window-size 5.
+Execution: Only after passing all these checks does it load the binary .pt weights into memory and begin making scheduling decisions.
+
+Summary: The checkpoints/ folder is not just a dumping ground for model files. It is a secure, auditable registry. The .pt file provides the intelligence, while the .json sidecar provides the trust and verification required to deploy that intelligence safely into a live Kubernetes cluster.
