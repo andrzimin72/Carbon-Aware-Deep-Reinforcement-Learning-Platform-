@@ -1,4 +1,4 @@
-### Carbon-Aware-Deep-Reinforcement-Learning-Platform-
+### Carbon-Aware-Deep-Reinforcement-Learning-Platform
 
 #### 1. What exactly is the software product we have created?
 We have created a production-ready, Kubernetes-native, carbon-aware workload scheduling platform. It operates as a custom Kubernetes controller that intercepts Pod scheduling requests and autonomously binds them to geo-distributed nodes. Its decision-making engine is powered by Deep Reinforcement Learning (specifically, a Recurrent PPO agent with LSTM memory), and it is governed by a rigorous, multi-layered risk management framework.
