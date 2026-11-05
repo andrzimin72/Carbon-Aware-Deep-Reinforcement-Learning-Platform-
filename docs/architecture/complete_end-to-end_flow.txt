@@ -1,0 +1,39 @@
+User submits annotated Pod
+        │
+        ▼
+┌──────────────────────────────────────────────────────────┐
+│  K8s API: Pod enters Pending state                       │
+└──────────────────────────────────────────────────────────┘
+        │
+        ▼
+┌──────────────────────────────────────────────────────────┐
+│  Controller watch stream detects Pod                     │
+│  ├─ Extracts task features from annotations              │
+│  ├─ Queries WattTime for live MOER (3 regions)           │
+│  ├─ Queries Prometheus/Kepler for live node utilization  │
+│  └─ Builds observation vector (window=5 + task features) │
+└──────────────────────────────────────────────────────────┘
+        │
+        ▼
+┌──────────────────────────────────────────────────────────┐
+│  RecurrentActorCriticPPO.forward(obs)                    │
+│  ├─ LSTM processes 5-hour grid history                   │
+│  ├─ Actor outputs node probabilities                     │
+│  └─ Critic outputs state value                           │
+└──────────────────────────────────────────────────────────┘
+        │
+        ▼
+┌──────────────────────────────────────────────────────────┐
+│  Safety gate                                             │
+│  ├─ Feed healthy?                                        │
+│  ├─ Interactive task? → force local                      │
+│  ├─ Destination node overloaded? → fallback              │
+│  └─ Returns (final_action, reason)                       │
+└──────────────────────────────────────────────────────────┘
+        │
+        ▼
+┌──────────────────────────────────────────────────────────┐
+│  k8s_core.create_namespaced_binding(pod, node)           │
+│  → Pod is bound directly, bypassing default scheduler    │
+│  → Decision written to Pod annotations for audit         │
+└──────────────────────────────────────────────────────────┘
